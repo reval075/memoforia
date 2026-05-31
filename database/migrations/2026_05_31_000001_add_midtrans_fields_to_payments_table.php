@@ -23,7 +23,6 @@ return new class extends Migration
             $table->json('gateway_payload')->nullable()->after('snap_token'); // Full Midtrans response
 
             // Timestamp fields
-            $table->timestamp('paid_at')->nullable()->change(); // Mark as nullable (already exists but making explicit)
             $table->timestamp('gateway_expired_at')->nullable()->after('paid_at'); // Midtrans transaction expiry
         });
     }
