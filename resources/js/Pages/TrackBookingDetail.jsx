@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { TRACKING_SESSION_KEY } from '../constants/tracking';
 import PaymentProofUpload from '../components/PaymentProofUpload';
+import MidtransPaymentGateway from '../components/MidtransPaymentGateway';
 import { art } from '@/design/artDirection';
 import EditorialStack from '@/components/art/EditorialStack';
 import ChunkyButton from '@/components/art/ChunkyButton';
@@ -194,13 +195,20 @@ export default function TrackBookingDetail() {
         ? Number(booking.package_variant.price)
         : Math.max(Number(booking.total_price || 0) - addonsTotal, 0);
 
+    const hasPendingManualPayment = payments.some((p) => p.status === 'pending' && p.payment_source === 'manual');
+
+    const canShowMidtransSection =
+        !booking.is_dp_expired &&
+        !clientDpExpired &&
+        (booking.status === 'waiting_dp' || (booking.status === 'confirmed' && booking.remaining_amount > 0)) &&
+        !hasPendingManualPayment;
+
     const canShowUploadSection =
         booking.can_upload_proof &&
         !booking.is_dp_expired &&
         !clientDpExpired &&
-        !['expired', 'cancelled', 'rejected', 'completed'].includes(booking.status);
-
-    const hasPendingPayment = payments.some((p) => p.status === 'pending');
+        !['expired', 'cancelled', 'rejected', 'completed'].includes(booking.status) &&
+        payments.some(p => p.payment_source === 'manual');
 
     return (
         <GuestLayout>
@@ -352,6 +360,15 @@ export default function TrackBookingDetail() {
                         </SectionCard>
                         </RevealItem>
 
+                        {canShowMidtransSection && (
+                            <MidtransPaymentGateway
+                                bookingCode={session.booking_code}
+                                contact={session.contact}
+                                booking={booking}
+                                onPaymentSuccess={refreshTrackingData}
+                            />
+                        )}
+
                         {canShowUploadSection && (
                             <PaymentProofUpload
                                 bookingCode={session.booking_code}
@@ -361,9 +378,9 @@ export default function TrackBookingDetail() {
                             />
                         )}
 
-                        {!canShowUploadSection && hasPendingPayment && (
-                            <div className="bg-blue-50 border border-blue-100 text-blue-700 px-5 py-4 rounded-2xl text-sm">
-                                Bukti pembayaran Anda sedang menunggu verifikasi admin.
+                        {hasPendingManualPayment && (
+                            <div className="bg-blue-50 border border-blue-100 text-blue-700 px-5 py-4 rounded-2xl text-sm mt-6">
+                                Bukti pembayaran manual Anda sedang menunggu verifikasi admin.
                             </div>
                         )}
 
