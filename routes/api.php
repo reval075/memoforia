@@ -8,6 +8,7 @@ use App\Http\Controllers\AvailabilityController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\RentalEquipmentController;
 use App\Http\Controllers\RentalRequestController;
+use App\Http\Controllers\PaymentController;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -25,7 +26,8 @@ Route::get('/availabilities', [AvailabilityController::class, 'index']); // Get 
 Route::post('/bookings', [BookingController::class, 'store']); // Guest booking
 Route::post('/bookings/track', [BookingController::class, 'track'])
     ->middleware('throttle:10,1'); // Guest booking lookup
-Route::post('/bookings/payment-proof', [BookingController::class, 'uploadProof']); // Guest uploads payment proof
+Route::post('/bookings/payment-proof', [BookingController::class, 'uploadProof']); // Guest uploads payment proof (disabled, kept for backward compat)
+Route::get('/bookings/{bookingCode}/payment-tracking', [PaymentController::class, 'getBookingPaymentTracking']);
 
 Route::get('/addons', function () {
     return response()->json(['data' => \App\Models\Addon::where('is_active', true)->get()]);
@@ -40,3 +42,7 @@ Route::get('/rental-equipments/{id}', [RentalEquipmentController::class, 'show']
 
 Route::post('/rental-requests', [RentalRequestController::class, 'store']); // Guest rental
 
+// Payment Routes (Midtrans)
+Route::post('/payments/create', [PaymentController::class, 'create']);
+Route::get('/payments/{paymentId}', [PaymentController::class, 'getStatus']);
+Route::post('/payments/webhook/midtrans', [PaymentController::class, 'webhook'])->withoutMiddleware('api');

@@ -217,4 +217,81 @@ class Booking extends Model
 
         return now()->gt($this->settlement_due_at) && $this->getRemainingAmount() > 0;
     }
+
+    /**
+     * Check if DP is already paid (verified)
+     */
+    public function isDpPaid(): bool
+    {
+        return $this->payments()
+            ->where('payment_type', 'dp')
+            ->where('status', 'verified')
+            ->exists();
+    }
+
+    /**
+     * Check if settlement is already paid (verified)
+     */
+    public function isSettlementPaid(): bool
+    {
+        return $this->payments()
+            ->where('payment_type', 'settlement')
+            ->where('status', 'verified')
+            ->exists();
+    }
+
+    /**
+     * Check if booking is fully paid
+     */
+    public function isFullyPaid(): bool
+    {
+        return $this->getRemainingAmount() <= 0;
+    }
+
+    /**
+     * Get DP payment amount (verified only)
+     */
+    public function getDpAmount(): int
+    {
+        return (int) $this->payments()
+            ->where('payment_type', 'dp')
+            ->where('status', 'verified')
+            ->sum('amount');
+    }
+
+    /**
+     * Get settlement payment amount (verified only)
+     */
+    public function getSettlementAmount(): int
+    {
+        return (int) $this->payments()
+            ->where('payment_type', 'settlement')
+            ->where('status', 'verified')
+            ->sum('amount');
+    }
+
+    /**
+     * Get pending DP payment if exists
+     */
+    public function getPendingDpPayment(): ?Payment
+    {
+        return $this->payments()
+            ->where('payment_type', 'dp')
+            ->where('status', 'pending')
+            ->latest()
+            ->first();
+    }
+
+    /**
+     * Get pending settlement payment if exists
+     */
+    public function getPendingSettlementPayment(): ?Payment
+    {
+        return $this->payments()
+            ->where('payment_type', 'settlement')
+            ->where('status', 'pending')
+            ->latest()
+            ->first();
+    }
 }
+
