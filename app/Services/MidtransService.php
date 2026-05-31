@@ -264,14 +264,18 @@ class MidtransService
      */
     public function updatePaymentStatus(Payment $payment, string $transactionStatus): bool
     {
-        $status = $this->mapTransactionStatus($transactionStatus);
+        $statusValue = $this->mapTransactionStatus($transactionStatus);
 
         $updateData = [
-            'status' => $status,
+            'status' => $statusValue,
             'gateway_reference' => $transactionStatus,
-            'verified_at' => in_array($transactionStatus, ['settlement', 'capture']) ? now() : null,
-            'paid_at' => in_array($transactionStatus, ['settlement', 'capture']) ? now() : null,
         ];
+
+        // Only update timestamps if we are transitioning to verified
+        if ($statusValue === \App\Enums\PaymentStatus::Verified->value) {
+            $updateData['verified_at'] = $payment->verified_at ?? now();
+            $updateData['paid_at'] = $payment->paid_at ?? now();
+        }
 
         $payment->update($updateData);
 
@@ -279,23 +283,26 @@ class MidtransService
     }
 
     /**
-     * Map Midtrans transaction status to payment status
+     * Map Midtrans transaction status to PaymentStatus enum value
+     *
+     * ISSUE 4: Explicit mapping — no default fallback
      *
      * @param string $transactionStatus
      * @return string
+     * @throws \InvalidArgumentException when unmapped status received
      */
     private function mapTransactionStatus(string $transactionStatus): string
     {
         return match ($transactionStatus) {
-            'pending' => 'pending',
-            'capture' => 'verified',
-            'settlement' => 'verified',
-            'deny' => 'rejected',
-            'cancel' => 'cancelled',
-            'expire' => 'expired',
-            'refund' => 'refunded',
-            'partial_refund' => 'refunded',
-            default => 'unknown',
+            'capture'        => \App\Enums\PaymentStatus::Verified->value,
+            'settlement'     => \App\Enums\PaymentStatus::Verified->value,
+            'pending'        => \App\Enums\PaymentStatus::Pending->value,
+            'deny'           => \App\Enums\PaymentStatus::Rejected->value,
+            'cancel'         => \App\Enums\PaymentStatus::Cancelled->value,
+            'expire'         => \App\Enums\PaymentStatus::Expired->value,
+            'refund'         => \App\Enums\PaymentStatus::Refunded->value,
+            'partial_refund' => \App\Enums\PaymentStatus::Refunded->value,
+            default          => throw new \InvalidArgumentException("Unmapped Midtrans status: {$transactionStatus}"),
         };
     }
 

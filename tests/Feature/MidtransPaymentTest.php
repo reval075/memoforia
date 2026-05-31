@@ -77,7 +77,7 @@ class MidtransPaymentTest extends TestCase
         $response->assertStatus(422);
         $response->assertJsonPath('success', false);
         // Note: amount > total_price is caught in createDpPayment logic, which returns:
-        $response->assertJsonPath('message', 'DP tidak boleh melebihi total harga booking');
+        $response->assertJsonPath('message', 'Jumlah DP melebihi sisa tagihan yang harus dibayar');
     }
 
     /**
@@ -430,5 +430,68 @@ class MidtransPaymentTest extends TestCase
         
         // Ensure no duplicate payments were created
         $this->assertEquals(1, $this->booking->payments()->count());
+    }
+
+    /**
+     * Test: Webhook returns 403 on invalid signature
+     */
+    public function test_webhook_returns_403_on_invalid_signature()
+    {
+        $payload = [
+            'transaction_status' => 'settlement',
+            'order_id' => 'ORDER-123',
+            'status_code' => '200',
+            'gross_amount' => '1000000.00',
+            'signature_key' => 'INVALID_SIGNATURE',
+        ];
+
+        $response = $this->postJson('/api/payments/webhook/midtrans', $payload);
+        $response->assertStatus(403);
+    }
+
+    /**
+     * Test: Webhook returns 404 on payment not found
+     */
+    public function test_webhook_returns_404_on_payment_not_found()
+    {
+        $orderId = 'NONEXISTENT-ORDER';
+        $payload = [
+            'transaction_status' => 'settlement',
+            'order_id' => $orderId,
+            'status_code' => '200',
+            'gross_amount' => '1000000.00',
+            'signature_key' => hash('sha512', $orderId . '200' . '1000000.00' . config('midtrans.server_key')),
+        ];
+
+        $response = $this->postJson('/api/payments/webhook/midtrans', $payload);
+        $response->assertStatus(404);
+    }
+
+    /**
+     * Test: Settlement block overpayment
+     */
+    public function test_create_dp_blocks_overpayment()
+    {
+        $this->booking->update(['status' => 'waiting_dp']);
+
+        // Already paid 2M
+        Payment::factory()->create([
+            'booking_id' => $this->booking->id,
+            'amount' => 2000000,
+            'payment_type' => 'dp',
+            'status' => \App\Enums\PaymentStatus::Verified,
+        ]);
+
+        // Attempting to pay 1.5M more when only 1M is remaining
+        $response = $this->postJson('/api/payments/create', [
+            'booking_code' => $this->booking->booking_code,
+            'contact' => $this->booking->customer_phone,
+            'payment_type' => 'dp',
+            'amount' => 1500000,
+            'payment_method' => 'va'
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonFragment(['message' => 'Jumlah DP melebihi sisa tagihan yang harus dibayar']);
     }
 }
