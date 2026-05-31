@@ -475,7 +475,7 @@ class BookingController extends Controller
         if ($validated['status'] === 'rejected') {
             $payment = Payment::findOrFail($id);
 
-            if ($payment->status !== 'pending') {
+            if ($payment->status !== \App\Enums\PaymentStatus::Pending) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Pembayaran ini sudah diverifikasi sebelumnya.',
@@ -504,7 +504,7 @@ class BookingController extends Controller
                 // 1. Lock the payment row — prevents double verification
                 $payment = Payment::lockForUpdate()->findOrFail($id);
 
-                if ($payment->status !== 'pending') {
+                if ($payment->status !== \App\Enums\PaymentStatus::Pending) {
                     throw new \Exception('Pembayaran ini sudah diverifikasi sebelumnya.');
                 }
 
@@ -590,14 +590,17 @@ class BookingController extends Controller
                         'payment_status' => 'paid',
                     ]);
 
-                    if ($booking->status !== 'confirmed') {
+                    // Verify total amount paid
+                    $totalPaid = $booking->payments()
+                        ->where('status', \App\Enums\PaymentStatus::Verified)
+                        ->sum('amount');
+
+                    if ($totalPaid >= $booking->total_price && $booking->status !== 'completed') {
                         $booking->update([
-                            'status' => 'confirmed',
-                            'confirmed_at' => now(),
-                            'settlement_due_at' => Carbon::parse($booking->event_date)->addDays(2)->endOfDay(),
+                            'status' => 'completed',
+                            'completed_at' => now(),
                         ]);
 
-                        // Keep competing-booking handling consistent with DP confirmation.
                         Booking::where('event_date', $booking->event_date)
                             ->where('id', '!=', $booking->id)
                             ->whereIn('status', ['pending_approval', 'waiting_dp'])

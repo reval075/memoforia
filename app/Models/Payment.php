@@ -34,6 +34,7 @@ class Payment extends Model
         'paid_at' => 'datetime',
         'gateway_expired_at' => 'datetime',
         'gateway_payload' => 'json',
+        'status' => \App\Enums\PaymentStatus::class,
     ];
 
     public function booking()

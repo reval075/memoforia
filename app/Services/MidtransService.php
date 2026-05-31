@@ -269,12 +269,9 @@ class MidtransService
         $updateData = [
             'status' => $status,
             'gateway_reference' => $transactionStatus,
+            'verified_at' => in_array($transactionStatus, ['settlement', 'capture']) ? now() : null,
+            'paid_at' => in_array($transactionStatus, ['settlement', 'capture']) ? now() : null,
         ];
-
-        if (in_array($status, ['verified', 'capture'])) {
-            $updateData['verified_at'] = now();
-            $updateData['paid_at'] = now();
-        }
 
         $payment->update($updateData);
 

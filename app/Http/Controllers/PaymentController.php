@@ -280,11 +280,24 @@ class PaymentController extends Controller
             $payment = Payment::findOrFail($notification['payment_id']);
             $booking = $payment->booking;
 
+            // Idempotency guard: ignore if already processed (final states)
+            if (in_array($payment->status, [\App\Enums\PaymentStatus::Verified, \App\Enums\PaymentStatus::Expired, \App\Enums\PaymentStatus::Cancelled, \App\Enums\PaymentStatus::Rejected])) {
+                Log::info('Webhook idempotency: payment already in final state', ['payment_id' => $payment->id, 'status' => $payment->status->value]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Webhook already processed',
+                    'data' => [
+                        'payment_id' => $payment->id,
+                        'status' => $payment->status,
+                    ],
+                ]);
+            }
+
             // Update payment status
             $this->midtransService->updatePaymentStatus($payment, $notification['transaction_status']);
 
             // Handle booking status update
-            if ($payment->status === 'verified') {
+            if ($payment->status === \App\Enums\PaymentStatus::Verified) {
                 if ($payment->payment_type === 'dp') {
                     // DP verified - move to confirmed
                     $this->confirmBookingAfterDp($booking);

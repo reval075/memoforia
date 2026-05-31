@@ -373,4 +373,62 @@ class MidtransPaymentTest extends TestCase
         // Should not error (endpoint exists)
         $this->assertNotEquals(404, $response->status());
     }
+    /**
+     * Test: Webhook idempotency - duplicate webhooks should not process twice
+     */
+    public function test_webhook_idempotency_prevents_double_processing()
+    {
+        $this->booking->update(['status' => 'waiting_dp']);
+
+        $payment = Payment::factory()->create([
+            'booking_id' => $this->booking->id,
+            'amount' => 1000000,
+            'payment_type' => 'dp',
+            'status' => 'pending',
+        ]);
+
+        $payload = [
+            'transaction_status' => 'settlement',
+            'order_id' => $payment->midtrans_order_id,
+            'payment_type' => 'bank_transfer',
+            'fraud_status' => 'accept',
+            'status_code' => '200',
+            'gross_amount' => '1000000.00',
+            'signature_key' => hash('sha512', $payment->midtrans_order_id . '200' . '1000000.00' . config('midtrans.server_key')),
+        ];
+
+        // Mock Midtrans signature verification
+        \Mockery::mock('alias:' . \Midtrans\Transaction::class)
+            ->shouldReceive('status')
+            ->twice()
+            ->with($payment->midtrans_order_id)
+            ->andReturn((object) $payload);
+
+        // First webhook - should succeed and process
+        $response1 = $this->postJson('/api/payments/webhook/midtrans', $payload);
+        $response1->dump()->assertStatus(200);
+
+        // Verify state changed
+        $payment->refresh();
+        $this->assertEquals(\App\Enums\PaymentStatus::Verified, $payment->status);
+        
+        $this->booking->refresh();
+        $this->assertEquals('confirmed', $this->booking->status);
+
+        // Store the exact update timestamp
+        $confirmedAt = $this->booking->confirmed_at;
+        sleep(1); // Small delay to ensure timestamp diff if it were to update again
+
+        // Second webhook (duplicate) - should succeed but skip processing
+        $response2 = $this->postJson('/api/payments/webhook/midtrans', $payload);
+        $response2->assertStatus(200);
+        $response2->assertJsonFragment(['message' => 'Webhook already processed']);
+
+        // Verify state didn't change (no double confirm)
+        $this->booking->refresh();
+        $this->assertEquals($confirmedAt->toDateTimeString(), $this->booking->confirmed_at->toDateTimeString());
+        
+        // Ensure no duplicate payments were created
+        $this->assertEquals(1, $this->booking->payments()->count());
+    }
 }

@@ -376,7 +376,7 @@ class BookingTest extends TestCase
         // Booking should remain expired
         $this->assertEquals('expired', $expiredBooking->fresh()->status);
         // Payment should remain pending (not verified)
-        $this->assertEquals('pending', $payment->fresh()->status);
+        $this->assertEquals(\App\Enums\PaymentStatus::Pending, $payment->fresh()->status);
     }
 
     /**
@@ -415,7 +415,7 @@ class BookingTest extends TestCase
         $booking->refresh();
         $this->assertEquals('expired', $booking->status);
         $this->assertNotNull($booking->cancelled_at);
-        $this->assertEquals('pending', $payment->fresh()->status);
+        $this->assertEquals(\App\Enums\PaymentStatus::Pending, $payment->fresh()->status);
     }
 
     /**
@@ -451,7 +451,7 @@ class BookingTest extends TestCase
 
         $booking->refresh();
         $this->assertEquals('expired', $booking->status);
-        $this->assertEquals('pending', $payment->fresh()->status);
+        $this->assertEquals(\App\Enums\PaymentStatus::Pending, $payment->fresh()->status);
     }
 
     /**
@@ -485,7 +485,7 @@ class BookingTest extends TestCase
         $response->assertJsonFragment(['message' => 'Booking tidak dalam status valid untuk verifikasi settlement/full payment.']);
 
         $this->assertEquals('pending_approval', $booking->fresh()->status);
-        $this->assertEquals('pending', $payment->fresh()->status);
+        $this->assertEquals(\App\Enums\PaymentStatus::Pending, $payment->fresh()->status);
     }
 
     /**
@@ -526,9 +526,9 @@ class BookingTest extends TestCase
 
         $response->assertStatus(200);
 
-        $this->assertEquals('confirmed', $bookingA->fresh()->status);
+        $this->assertEquals('completed', $bookingA->fresh()->status);
         $this->assertEquals('paid', $bookingA->fresh()->payment_status);
-        $this->assertNotNull($bookingA->fresh()->confirmed_at);
+        $this->assertNotNull($bookingA->fresh()->completed_at);
 
         $this->assertEquals('cancelled', $bookingB->fresh()->status);
         $this->assertStringContainsString('Otomatis dibatalkan', $bookingB->fresh()->notes);
@@ -646,7 +646,7 @@ class BookingTest extends TestCase
             'status' => 'verified',
         ]);
         $response1->assertStatus(200);
-        $this->assertEquals('verified', $payment->fresh()->status);
+        $this->assertEquals(\App\Enums\PaymentStatus::Verified, $payment->fresh()->status);
 
         // Second verification should fail (payment already verified)
         $response2 = $this->actingAs($admin)->postJson("/admin/api/payments/{$payment->id}/verify", [
