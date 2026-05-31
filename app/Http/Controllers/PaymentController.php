@@ -34,7 +34,7 @@ class PaymentController extends Controller
         try {
             $validated = $request->validate([
                 'booking_code'   => 'required|string|exists:bookings,booking_code',
-                'contact'        => 'nullable|string',
+                'contact'        => 'required|string',
                 'payment_type'   => 'required|in:dp,settlement',
                 'amount'         => 'required_if:payment_type,dp|numeric|min:500000',
                 'payment_method' => 'required|in:va,qris',
@@ -42,11 +42,7 @@ class PaymentController extends Controller
 
             $booking = Booking::where('booking_code', $validated['booking_code'])->firstOrFail();
 
-            $contactInput = $validated['contact'] ?? $booking->customer_phone;
-            $normalizedContact = $this->normalizePhone($contactInput);
-            $normalizedPhone   = $this->normalizePhone($booking->customer_phone);
-
-            if ($normalizedContact !== $normalizedPhone) {
+            if (!$booking->contactMatches($validated['contact'])) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Nomor kontak tidak sesuai dengan booking',
@@ -109,23 +105,5 @@ class PaymentController extends Controller
     public function getBookingPaymentTracking($bookingCode)
     {
         return $this->bookingPaymentService->getBookingPaymentTracking($bookingCode);
-    }
-
-    /**
-     * Normalize phone number to standard 62 format
-     */
-    private function normalizePhone(?string $phone): string
-    {
-        if (!$phone) {
-            return '';
-        }
-
-        $clean = preg_replace('/\D+/', '', $phone);
-        
-        if (str_starts_with($clean, '0')) {
-            $clean = '62' . substr($clean, 1);
-        }
-        
-        return $clean;
     }
 }

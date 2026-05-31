@@ -43,17 +43,19 @@ class MidtransPaymentTest extends TestCase
     }
 
     /**
-     * Test: Contact validation accepts missing contact fallback
+     * Test: Contact validation accepts valid email
      */
-    public function test_payment_create_accepts_missing_contact_fallback()
+    public function test_payment_create_accepts_valid_email()
     {
+        $this->booking->update(['customer_email' => 'test@example.com']);
+
         \Mockery::mock('alias:' . \Midtrans\Snap::class)
             ->shouldReceive('getSnapToken')
             ->andReturn('dummy_snap_token');
 
         $response = $this->postJson('/api/payments/create', [
             'booking_code' => $this->booking->booking_code,
-            // 'contact' => missing
+            'contact' => 'test@example.com',
             'payment_type' => 'dp',
             'amount' => 1000000,
             'payment_method' => 'va',
