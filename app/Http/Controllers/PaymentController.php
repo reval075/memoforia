@@ -328,18 +328,40 @@ class PaymentController extends Controller
     private function confirmBookingAfterDp(Booking $booking): void
     {
         if ($booking->status === 'waiting_dp') {
-            $dueDate = now()->addDays(7);
+            DB::transaction(function () use ($booking) {
+                // Pessimistic locking on the booking row
+                $booking = Booking::where('id', $booking->id)->lockForUpdate()->first();
 
-            $booking->update([
-                'status' => 'confirmed',
-                'confirmed_at' => now(),
-                'settlement_due_at' => $dueDate,
-            ]);
+                if ($booking->status !== 'waiting_dp') {
+                    return; // Safety guard
+                }
 
-            Log::info('Booking confirmed after DP payment', [
-                'booking_id' => $booking->id,
-                'booking_code' => $booking->booking_code,
-            ]);
+                // Settlement deadline is event_date + 2 days
+                $eventDate = \Carbon\Carbon::parse($booking->event_date);
+                $dueDate = $eventDate->copy()->addDays(2)->endOfDay();
+
+                $booking->update([
+                    'status' => 'confirmed',
+                    'confirmed_at' => now(),
+                    'settlement_due_at' => $dueDate,
+                    'payment_status' => 'partially_paid',
+                ]);
+
+                // Auto-cancel competing bookings on the same date
+                Booking::where('event_date', $booking->event_date)
+                    ->where('id', '!=', $booking->id)
+                    ->where('status', 'waiting_dp')
+                    ->update([
+                        'status' => 'cancelled',
+                        'cancelled_at' => now(),
+                        'notes' => 'Otomatis dibatalkan karena tanggal telah dikonfirmasi oleh customer lain.',
+                    ]);
+
+                Log::info('Booking confirmed after DP payment', [
+                    'booking_id' => $booking->id,
+                    'booking_code' => $booking->booking_code,
+                ]);
+            });
         }
     }
 
@@ -348,22 +370,28 @@ class PaymentController extends Controller
      */
     private function completeBookingAfterSettlement(Booking $booking): void
     {
-        // Verify all payments are complete
-        $totalPaid = $booking->payments()
-            ->where('status', 'verified')
-            ->sum('amount');
+        DB::transaction(function () use ($booking) {
+            // Pessimistic locking
+            $booking = Booking::where('id', $booking->id)->lockForUpdate()->first();
+            
+            // Verify all payments are complete
+            $totalPaid = $booking->payments()
+                ->where('status', 'verified')
+                ->sum('amount');
 
-        if ($totalPaid >= $booking->total_price) {
-            $booking->update([
-                'status' => 'completed',
-                'completed_at' => now(),
-            ]);
+            if ($totalPaid >= $booking->total_price && $booking->status !== 'completed') {
+                $booking->update([
+                    'status' => 'completed',
+                    'completed_at' => now(),
+                    'payment_status' => 'paid',
+                ]);
 
-            Log::info('Booking completed after settlement payment', [
-                'booking_id' => $booking->id,
-                'booking_code' => $booking->booking_code,
-            ]);
-        }
+                Log::info('Booking completed after settlement payment', [
+                    'booking_id' => $booking->id,
+                    'booking_code' => $booking->booking_code,
+                ]);
+            }
+        });
     }
 
     /**

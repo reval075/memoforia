@@ -378,6 +378,15 @@ class BookingController extends Controller
             'proof_image' => 'required_without:proof_file|string',
         ]);
 
+        if ($validated['payment_type'] === 'dp') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pembayaran DP manual tidak lagi didukung. Silakan gunakan gateway pembayaran otomatis.',
+                'data' => null,
+                'errors' => null,
+            ], 422);
+        }
+
         $booking = Booking::where('booking_code', $validated['booking_code'])->first();
 
         if (! $booking || ! $booking->contactMatches($validated['contact'])) {

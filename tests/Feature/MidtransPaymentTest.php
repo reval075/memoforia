@@ -57,7 +57,8 @@ class MidtransPaymentTest extends TestCase
 
         $response->assertStatus(422);
         $response->assertJsonPath('success', false);
-        $response->assertJsonPath('message', 'Minimal DP adalah Rp500.000');
+        $response->assertJsonPath('message', 'Validasi gagal');
+        $this->assertArrayHasKey('amount', $response->json('errors'));
     }
 
     /**
@@ -75,6 +76,8 @@ class MidtransPaymentTest extends TestCase
 
         $response->assertStatus(422);
         $response->assertJsonPath('success', false);
+        // Note: amount > total_price is caught in createDpPayment logic, which returns:
+        $response->assertJsonPath('message', 'DP tidak boleh melebihi total harga booking');
     }
 
     /**
@@ -82,10 +85,10 @@ class MidtransPaymentTest extends TestCase
      */
     public function test_create_dp_transaction()
     {
-        // Mock Midtrans Snap API
-        Http::fake([
-            '*' => Http::response(['token' => 'fake_snap_token_123'], 200),
-        ]);
+        // Mock Midtrans Snap API via Mockery alias
+        \Mockery::mock('alias:' . \Midtrans\Snap::class)
+            ->shouldReceive('getSnapToken')
+            ->andReturn('fake_snap_token_123');
 
         $response = $this->postJson('/api/payments/create', [
             'booking_code' => $this->booking->booking_code,
@@ -145,10 +148,10 @@ class MidtransPaymentTest extends TestCase
             'payment_source' => 'midtrans',
         ]);
 
-        // Mock Midtrans
-        Http::fake([
-            '*' => Http::response(['token' => 'settlement_token_123'], 200),
-        ]);
+        // Mock Midtrans Snap API via Mockery alias
+        \Mockery::mock('alias:' . \Midtrans\Snap::class)
+            ->shouldReceive('getSnapToken')
+            ->andReturn('fake_snap_token_123');
 
         $response = $this->postJson('/api/payments/create', [
             'booking_code' => $this->booking->booking_code,
@@ -190,8 +193,13 @@ class MidtransPaymentTest extends TestCase
         $orderId = 'MEMO-TEST-123456';
         $statusCode = '200';
         $grossAmount = '700000';
-        $serverKey = config('services.midtrans.server_key');
+        $serverKey = config('midtrans.server_key');
         $signature = hash('sha512', $orderId . $statusCode . $grossAmount . $serverKey);
+
+        \Mockery::mock('alias:' . \Midtrans\Transaction::class)
+            ->shouldReceive('status')
+            ->with($orderId)
+            ->andReturn((object) ['transaction_status' => 'settlement']);
 
         $webhookData = [
             'order_id' => $orderId,
@@ -232,8 +240,13 @@ class MidtransPaymentTest extends TestCase
         $orderId = 'MEMO-DP-123456';
         $statusCode = '200';
         $grossAmount = (string) $dpPayment->amount;
-        $serverKey = config('services.midtrans.server_key');
+        $serverKey = config('midtrans.server_key');
         $signature = hash('sha512', $orderId . $statusCode . $grossAmount . $serverKey);
+
+        \Mockery::mock('alias:' . \Midtrans\Transaction::class)
+            ->shouldReceive('status')
+            ->with($orderId)
+            ->andReturn((object) ['transaction_status' => 'settlement']);
 
         $webhookData = [
             'order_id' => $orderId,
@@ -281,8 +294,13 @@ class MidtransPaymentTest extends TestCase
         $orderId = 'MEMO-SETTLE-123456';
         $statusCode = '200';
         $grossAmount = '2300000';
-        $serverKey = config('services.midtrans.server_key');
+        $serverKey = config('midtrans.server_key');
         $signature = hash('sha512', $orderId . $statusCode . $grossAmount . $serverKey);
+
+        \Mockery::mock('alias:' . \Midtrans\Transaction::class)
+            ->shouldReceive('status')
+            ->with($orderId)
+            ->andReturn((object) ['transaction_status' => 'settlement']);
 
         $webhookData = [
             'order_id' => $orderId,

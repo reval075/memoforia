@@ -34,6 +34,7 @@ class Booking extends Model
         'package_id',
         'branch_id',
         'availability_id',
+        'completed_at',
     ];
 
     protected $casts = [
@@ -43,6 +44,7 @@ class Booking extends Model
         'dp_expired_at' => 'datetime',
         'settlement_due_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'completed_at' => 'datetime',
     ];
 
     /**

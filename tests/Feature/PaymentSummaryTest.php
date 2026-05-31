@@ -27,8 +27,10 @@ class PaymentSummaryTest extends TestCase
         $confirmed = Booking::factory()->create(['status' => 'confirmed']);
         $completed = Booking::factory()->create(['status' => 'completed']);
 
+        $admin = User::factory()->create(['role' => 'admin']);
+
         // Test with 'all' status filter
-        $response = $this->getJson('/api/admin/bookings?status=all');
+        $response = $this->actingAs($admin)->getJson('/admin/api/bookings?status=all');
 
         $this->assertEquals(4, count($response['data']));
     }
@@ -40,8 +42,10 @@ class PaymentSummaryTest extends TestCase
         $waiting = Booking::factory()->create(['status' => 'waiting_dp']);
         $confirmed = Booking::factory()->create(['status' => 'confirmed']);
 
+        $admin = User::factory()->create(['role' => 'admin']);
+
         // Test with empty status filter
-        $response = $this->getJson('/api/admin/bookings?status=');
+        $response = $this->actingAs($admin)->getJson('/admin/api/bookings?status=');
 
         $this->assertEquals(3, count($response['data']));
     }
@@ -294,7 +298,7 @@ class PaymentSummaryTest extends TestCase
             'status' => 'confirmed',
             'confirmed_at' => now(),
             'payment_status' => 'partially_paid',
-            'settlement_due_at' => $eventDate->addDays(2)->endOfDay(),
+            'settlement_due_at' => $eventDate->copy()->addDays(2)->endOfDay(),
         ]);
 
         // Verify final state

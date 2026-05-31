@@ -180,8 +180,10 @@ class BookingTrackingTest extends TestCase
 
         $entities = $this->createBaseEntities();
         $booking = $this->createBooking($entities, [
-            'status' => 'waiting_dp',
-            'dp_expired_at' => now()->addHours(12),
+            'status' => 'confirmed',
+            'payment_status' => 'partially_paid',
+            'dp_expired_at' => null,
+            'settlement_due_at' => now()->addDays(2),
         ]);
 
         $file = UploadedFile::fake()->image('proof.jpg', 800, 600);
@@ -190,18 +192,19 @@ class BookingTrackingTest extends TestCase
             'booking_code' => $booking->booking_code,
             'contact' => 'john@example.com',
             'amount' => 1000000,
-            'payment_type' => 'dp',
+            'payment_type' => 'settlement',
             'payment_method' => 'Bank Transfer',
             'proof_file' => $file,
         ]);
 
+        $response->dump();
         $response->assertStatus(201);
         $response->assertJsonFragment(['success' => true]);
 
         $this->assertDatabaseHas('payments', [
             'booking_id' => $booking->id,
             'status' => 'pending',
-            'payment_type' => 'dp',
+            'payment_type' => 'settlement',
         ]);
 
         Storage::disk('public')->assertExists('payment-proofs/'.$file->hashName());

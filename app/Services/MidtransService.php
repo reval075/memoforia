@@ -24,11 +24,11 @@ class MidtransService
      */
     private function initializeConfig(): void
     {
-        Config::$serverKey = config('services.midtrans.server_key');
-        Config::$clientKey = config('services.midtrans.client_key');
-        Config::$isProduction = config('services.midtrans.is_production', false);
-        Config::$isSanitized = config('services.midtrans.is_sanitized', true);
-        Config::$is3ds = config('services.midtrans.is_3ds', true);
+        Config::$serverKey = config('midtrans.server_key');
+        Config::$clientKey = config('midtrans.client_key');
+        Config::$isProduction = config('midtrans.is_production', false);
+        Config::$isSanitized = config('midtrans.is_sanitized', true);
+        Config::$is3ds = config('midtrans.is_3ds', true);
     }
 
     /**
@@ -216,7 +216,7 @@ class MidtransService
             }
 
             // Verify signature: sha512(order_id + status_code + gross_amount + server_key)
-            $expectedSignature = hash('sha512', $orderId . $statusCode . $grossAmount . config('services.midtrans.server_key'));
+            $expectedSignature = hash('sha512', $orderId . $statusCode . $grossAmount . config('midtrans.server_key'));
 
             if ($signature !== $expectedSignature) {
                 Log::warning('Midtrans signature verification failed', [

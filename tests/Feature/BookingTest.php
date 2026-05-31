@@ -577,9 +577,9 @@ class BookingTest extends TestCase
             'booking_code' => 'MEMO-20260602-DPEXP',
             'contact' => 'john@example.com',
             'amount' => 1000000,
-            'payment_type' => 'dp',
+            'payment_type' => 'settlement',
             'payment_method' => 'Bank Transfer',
-            'proof_image' => 'proof.png',
+            'proof_image' => 'base64image',
         ]);
 
         $response->assertStatus(422);
