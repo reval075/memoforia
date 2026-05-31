@@ -43,6 +43,68 @@ class MidtransPaymentTest extends TestCase
     }
 
     /**
+     * Test: Contact validation accepts missing contact fallback
+     */
+    public function test_payment_create_accepts_missing_contact_fallback()
+    {
+        \Mockery::mock('alias:' . \Midtrans\Snap::class)
+            ->shouldReceive('getSnapToken')
+            ->andReturn('dummy_snap_token');
+
+        $response = $this->postJson('/api/payments/create', [
+            'booking_code' => $this->booking->booking_code,
+            // 'contact' => missing
+            'payment_type' => 'dp',
+            'amount' => 1000000,
+            'payment_method' => 'va',
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    /**
+     * Test: Contact validation accepts same phone different format
+     */
+    public function test_payment_create_accepts_same_phone_different_format()
+    {
+        $this->booking->update(['customer_phone' => '08123456789']);
+
+        \Mockery::mock('alias:' . \Midtrans\Snap::class)
+            ->shouldReceive('getSnapToken')
+            ->andReturn('dummy_snap_token');
+
+        $response = $this->postJson('/api/payments/create', [
+            'booking_code' => $this->booking->booking_code,
+            'contact' => '+62 812-3456-789',
+            'payment_type' => 'dp',
+            'amount' => 1000000,
+            'payment_method' => 'va',
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    /**
+     * Test: Contact validation rejects different phone
+     */
+    public function test_payment_create_rejects_different_phone()
+    {
+        $this->booking->update(['customer_phone' => '08123456789']);
+
+        $response = $this->postJson('/api/payments/create', [
+            'booking_code' => $this->booking->booking_code,
+            'contact' => '08129999999',
+            'payment_type' => 'dp',
+            'amount' => 1000000,
+            'payment_method' => 'va',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('success', false);
+        $response->assertJsonPath('message', 'Nomor kontak tidak sesuai dengan booking');
+    }
+
+    /**
      * Test: DP minimum validation (Rp500.000)
      */
     public function test_dp_minimum_validation()
