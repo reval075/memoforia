@@ -36,7 +36,7 @@ export default function Navbar() {
         { name: 'Track Booking', href: '/track-booking' },
         { name: 'Rentals', href: '/rentals' },
         { name: 'Pricelist', href: '/pricelist' },
-        { name: 'Branches', href: '/branches' },
+        { name: 'Locations', href: '/locations' },
     ];
 
     return (

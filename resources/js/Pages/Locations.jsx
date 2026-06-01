@@ -34,9 +34,9 @@ function InfoSection({ icon: Icon, label, value, action, actionLabel }) {
     );
 }
 
-export default function Branches({ branches = [] }) {
+export default function Locations({ locations = [] }) {
     // Use first active branch or config data
-    const branch = branches.find(b => b.is_active) || {
+    const branch = locations.find(b => b.is_active) || {
         name: branchConfig.name,
         address: branchConfig.address,
         city: branchConfig.city,

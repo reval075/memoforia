@@ -204,8 +204,8 @@ export default function Home() {
                             moments that last longer than a camera roll.
                         </motion.p>
                         <div className="mt-10">
-                            <ChunkyButton href="/branches" variant="ghost">
-                                Learn more <ArrowRight size={18} />
+                            <ChunkyButton href="/locations" variant="ghost">
+                                View Locations <ArrowRight size={18} />
                             </ChunkyButton>
                         </div>
                     </div>
@@ -269,7 +269,7 @@ export default function Home() {
                         </p>
                         <div className="flex flex-wrap gap-8 mt-10 md:justify-end">
                             {[
-                                { n: '3', l: 'Branches' },
+                                { n: '3', l: 'Locations' },
                                 { n: '10+', l: 'Packages' },
                                 { n: '4.9', l: 'Rating', star: true },
                             ].map((s) => (
@@ -373,8 +373,8 @@ export default function Home() {
                         <InteractiveHangingCamera redirectTo="/booking" variant="light" />
                     </div>
                     <div className="flex flex-col sm:flex-row justify-center gap-4">
-                        <ChunkyButton href="/branches" variant="secondary">
-                            Find a Branch
+                        <ChunkyButton href="/locations" variant="secondary">
+                            Find Locations
                         </ChunkyButton>
                     </div>
                 </div>
