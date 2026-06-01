@@ -107,7 +107,7 @@ class MidtransPaymentTest extends TestCase
     }
 
     /**
-     * Test: DP minimum validation (Rp500.000)
+     * Test: DP minimum validation (below 40% of total)
      */
     public function test_dp_minimum_validation()
     {

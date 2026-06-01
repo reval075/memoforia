@@ -10,7 +10,14 @@ class EnsureUserIsAdmin
 {
     public function handle(Request $request, Closure $next)
     {
-        if (!Auth::check() || !in_array(Auth::user()->role, ['admin', 'superadmin'])) {
+        if (! Auth::check() || ! in_array(Auth::user()->role, ['admin', 'superadmin'])) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized.',
+                ], 403);
+            }
+
             return redirect()->route('login');
         }
 

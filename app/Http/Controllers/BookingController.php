@@ -446,6 +446,7 @@ class BookingController extends Controller
             'payment_type' => $validated['payment_type'],
             'payment_method' => $validated['payment_method'],
             'proof_image' => $proofImage,
+            'payment_source' => 'manual',
             'status' => 'pending',
         ]);
 
@@ -758,6 +759,8 @@ class BookingController extends Controller
             'is_settlement_overdue' => $isOverdue,
             'can_upload_proof' => $uploadCapabilities['can_upload_proof'],
             'allowed_payment_types' => $uploadCapabilities['allowed_payment_types'],
+            'min_dp_percent' => \App\Support\DpAmountCalculator::minDpPercent('booking'),
+            'min_dp_amount' => \App\Support\DpAmountCalculator::minDpForTotal((float) $booking->total_price, 'booking'),
             'service_package' => $booking->servicePackage ? [
                 'id' => $booking->servicePackage->id,
                 'name' => $booking->servicePackage->name,
@@ -814,9 +817,21 @@ class BookingController extends Controller
             ];
         }
 
+        $hasPendingManual = $booking->payments()
+            ->where('payment_source', 'manual')
+            ->where('status', \App\Enums\PaymentStatus::Pending)
+            ->exists();
+
+        if ($hasPendingManual) {
+            return [
+                'can_upload_proof' => false,
+                'allowed_payment_types' => [],
+            ];
+        }
+
         if ($booking->status === 'waiting_dp') {
             $canUpload = true;
-            $allowedTypes = ['dp'];
+            $allowedTypes = ['full_payment'];
         } elseif ($booking->status === 'confirmed' && $booking->payment_status === 'partially_paid') {
             $canUpload = true;
             // Settlement allowed even if overdue; UI will show alert

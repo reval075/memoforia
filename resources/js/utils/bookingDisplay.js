@@ -83,24 +83,38 @@ export const formatDate = (value) => {
     });
 };
 
-export const getStatusMessage = (booking) => {
-    switch (booking?.status) {
+export const getStatusMessage = (record, type = 'booking') => {
+    const isRental = type === 'rental';
+
+    switch (record?.status) {
         case 'pending_approval':
-            return 'Pengajuan booking Anda sedang ditinjau oleh tim admin.';
+            return isRental
+                ? 'Pengajuan sewa Anda sedang ditinjau oleh tim admin.'
+                : 'Pengajuan booking Anda sedang ditinjau oleh tim admin.';
         case 'waiting_dp':
-            return booking.dp_expired_at
-                ? `Silakan lakukan pembayaran DP sebelum ${formatDateTime(booking.dp_expired_at)}.`
-                : 'Silakan lakukan pembayaran DP untuk melanjutkan konfirmasi jadwal.';
+            return record.dp_expired_at
+                ? `Silakan lakukan pembayaran DP atau lunas sebelum ${formatDateTime(record.dp_expired_at)}.`
+                : isRental
+                    ? 'Silakan lakukan pembayaran DP atau lunas untuk melanjutkan konfirmasi sewa.'
+                    : 'Silakan lakukan pembayaran DP untuk melanjutkan konfirmasi jadwal.';
         case 'confirmed':
-            return 'Booking Anda telah dikonfirmasi. Jadwal event telah terkunci.';
+            return isRental
+                ? 'Sewa Anda telah dikonfirmasi. Silakan lunasi sisa tagihan sebelum batas waktu.'
+                : 'Booking Anda telah dikonfirmasi. Jadwal event telah terkunci.';
         case 'completed':
-            return 'Event telah selesai. Terima kasih telah menggunakan layanan Memoforia.';
+            return isRental
+                ? 'Penyewaan selesai. Terima kasih telah menggunakan layanan Memoforia.'
+                : 'Event telah selesai. Terima kasih telah menggunakan layanan Memoforia.';
         case 'cancelled':
-            return 'Booking ini telah dibatalkan.';
+            return isRental ? 'Sewa ini telah dibatalkan.' : 'Booking ini telah dibatalkan.';
         case 'expired':
-            return 'Batas waktu pembayaran DP telah habis. Booking tidak lagi aktif.';
+            return isRental
+                ? 'Batas waktu pembayaran DP telah habis. Sewa tidak lagi aktif.'
+                : 'Batas waktu pembayaran DP telah habis. Booking tidak lagi aktif.';
         case 'rejected':
-            return 'Pengajuan booking ditolak oleh admin.';
+            return isRental
+                ? 'Pengajuan sewa ditolak oleh admin.'
+                : 'Pengajuan booking ditolak oleh admin.';
         default:
             return null;
     }
@@ -135,4 +149,36 @@ export const getDpCountdown = (dpExpiredAt) => {
     }
 
     return { isExpired: false, text: `Sisa waktu pembayaran DP: ${hours} jam ${mins} menit`, minutesLeft };
+};
+
+/** Minimum DP from total (matches backend DpAmountCalculator). */
+export const calculateMinDpAmount = (totalPrice, minDpPercent = 40) => {
+    const total = Number(totalPrice) || 0;
+    const percent = Number(minDpPercent) || 40;
+    if (total <= 0) {
+        return 0;
+    }
+    return Math.ceil(total * (percent / 100));
+};
+
+/** Parse IDR input (strips thousand separators). */
+export const parsePaymentAmountInput = (value) => {
+    if (value === '' || value === null || value === undefined) {
+        return NaN;
+    }
+    const cleaned = String(value).trim().replace(/\s/g, '').replace(/\./g, '').replace(/,/g, '');
+    if (cleaned === '') {
+        return NaN;
+    }
+    const num = Number(cleaned);
+    return Number.isFinite(num) ? num : NaN;
+};
+
+export const resolveMinDpForTransaction = (transactionData) => {
+    const fromApi = Number(transactionData?.min_dp_amount);
+    if (Number.isFinite(fromApi) && fromApi > 0) {
+        return fromApi;
+    }
+    const percent = Number(transactionData?.min_dp_percent) || 40;
+    return calculateMinDpAmount(transactionData?.total_price, percent);
 };

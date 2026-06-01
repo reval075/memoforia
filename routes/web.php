@@ -31,6 +31,18 @@ Route::get('/rentals', function () {
     return Inertia::render('Rentals');
 });
 
+Route::get('/track-rental', function () {
+    $query = request()->query();
+    $code = isset($query['code']) ? '?code='.urlencode($query['code']) : '';
+    $type = isset($query['type']) ? ($code ? '&' : '?').'type='.urlencode($query['type']) : '';
+
+    return redirect('/track-booking'.$code.$type);
+});
+
+Route::get('/track-rental/detail', function () {
+    return Inertia::render('TrackRentalDetail');
+});
+
 Route::get('/pricelist', function () {
     return Inertia::render('Pricelist', [
         'packages' => \App\Models\ServicePackage::with('packageVariants')
@@ -66,7 +78,12 @@ Route::middleware('guest')->group(function () {
 Route::middleware(['auth', 'admin'])->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
     Route::get('/admin/dashboard', function () {
-        return Inertia::render('Dashboard');
+        return Inertia::render('Dashboard', [
+            'initialRentals' => \App\Models\RentalRequest::with(['items.equipment', 'payments'])
+                ->latest()
+                ->get(),
+            'pendingRentalCount' => \App\Models\RentalRequest::where('status', 'pending_approval')->count(),
+        ]);
     })->name('dashboard');
 
     // Admin Booking Management
@@ -79,6 +96,15 @@ Route::middleware(['auth', 'admin'])->group(function () {
 
     // Admin Payment Verification
     Route::post('/admin/api/payments/{id}/verify', [\App\Http\Controllers\BookingController::class, 'verifyPayment']);
+
+    // Admin Rental Management
+    Route::get('/admin/api/rentals', [\App\Http\Controllers\RentalRequestController::class, 'adminIndex']);
+    Route::post('/admin/api/rentals/{id}/approve', [\App\Http\Controllers\RentalRequestController::class, 'approve']);
+    Route::post('/admin/api/rentals/{id}/reject', [\App\Http\Controllers\RentalRequestController::class, 'reject']);
+    Route::post('/admin/api/rentals/{id}/status', [\App\Http\Controllers\RentalRequestController::class, 'updateStatus']);
+    Route::post('/admin/api/rentals/{id}/complete', [\App\Http\Controllers\RentalRequestController::class, 'complete']);
+    Route::post('/admin/api/rentals/{id}/cancel', [\App\Http\Controllers\RentalRequestController::class, 'cancel']);
+    Route::post('/admin/api/rentals-payments/{id}/verify', [\App\Http\Controllers\RentalRequestController::class, 'verifyPayment']);
 
     // Admin Service Packages CRUD
     Route::get('/admin/api/service-packages', [\App\Http\Controllers\PackageController::class, 'adminIndex']);

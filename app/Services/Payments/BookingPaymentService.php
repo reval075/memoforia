@@ -6,6 +6,7 @@ use App\Enums\PaymentStatus;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Services\MidtransService;
+use App\Support\DpAmountCalculator;
 
 class BookingPaymentService
 {
@@ -32,11 +33,14 @@ class BookingPaymentService
         }
 
         $dpAmount = (float) $validated['amount'];
+        $minDp    = DpAmountCalculator::minDpForTotal((float) $booking->total_price, 'booking');
 
-        if ($dpAmount < 500000) {
+        if ($dpAmount < $minDp) {
+            $percent = DpAmountCalculator::minDpPercent('booking');
+
             return response()->json([
                 'success' => false,
-                'message' => 'Minimal DP adalah Rp500.000',
+                'message' => "Minimal pembayaran DP adalah Rp".number_format($minDp, 0, ',', '.')." ({$percent}% dari total tagihan)",
                 'data'    => null,
             ], 422);
         }

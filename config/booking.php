@@ -23,4 +23,14 @@ return [
     */
     'payment_proof_max_kb' => env('BOOKING_PAYMENT_PROOF_MAX_KB', 5120),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Minimum DP (Midtrans) — percent of total_price (primary rule)
+    |--------------------------------------------------------------------------
+    */
+    'min_dp_percent' => (int) env('BOOKING_MIN_DP_PERCENT', 40),
+
+    /** Optional absolute floor in IDR (0 = use percent only) */
+    'min_dp_absolute_floor' => (int) env('BOOKING_MIN_DP_ABSOLUTE_FLOOR', 0),
+
 ];

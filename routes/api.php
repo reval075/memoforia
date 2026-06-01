@@ -40,9 +40,16 @@ Route::get('/photo-templates', function () {
 Route::get('/rental-equipments', [RentalEquipmentController::class, 'index']);
 Route::get('/rental-equipments/{id}', [RentalEquipmentController::class, 'show']);
 
-Route::post('/rental-requests', [RentalRequestController::class, 'store']); // Guest rental
+Route::post('/rental-requests', [RentalRequestController::class, 'store']);           // Guest submit rental
+Route::post('/rental-requests/track', [RentalRequestController::class, 'track'])     // Guest lookup rental
+    ->middleware('throttle:10,1');
+Route::post('/rental-requests/payment-proof', [RentalRequestController::class, 'uploadProof'])
+    ->middleware('throttle:10,1');
+Route::get('/rentals/{rentalCode}/payment-tracking', [PaymentController::class, 'getRentalPaymentTracking']);
 
 // Payment Routes (Midtrans)
 Route::post('/payments/create', [PaymentController::class, 'create']);
 Route::get('/payments/{paymentId}', [PaymentController::class, 'getStatus']);
+Route::post('/payments/{paymentId}/sync', [PaymentController::class, 'sync']);
 Route::post('/payments/webhook/midtrans', [PaymentController::class, 'webhook'])->withoutMiddleware('api');
+

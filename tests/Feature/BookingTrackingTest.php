@@ -122,7 +122,7 @@ class BookingTrackingTest extends TestCase
 
         $this->assertEquals('waiting_dp', $response->json('data.status'));
         $this->assertTrue($response->json('data.can_upload_proof'));
-        $this->assertEquals(['dp'], $response->json('data.allowed_payment_types'));
+        $this->assertEquals(['full_payment'], $response->json('data.allowed_payment_types'));
     }
 
     public function test_track_booking_success_with_normalized_phone(): void
@@ -197,7 +197,6 @@ class BookingTrackingTest extends TestCase
             'proof_file' => $file,
         ]);
 
-        $response->dump();
         $response->assertStatus(201);
         $response->assertJsonFragment(['success' => true]);
 
@@ -205,6 +204,7 @@ class BookingTrackingTest extends TestCase
             'booking_id' => $booking->id,
             'status' => 'pending',
             'payment_type' => 'settlement',
+            'payment_source' => 'manual',
         ]);
 
         Storage::disk('public')->assertExists('payment-proofs/'.$file->hashName());

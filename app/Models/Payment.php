@@ -11,6 +11,7 @@ class Payment extends Model
 
     protected $fillable = [
         'booking_id',
+        'rental_request_id',
         'amount',
         'payment_type',
         'payment_method',
@@ -40,6 +41,11 @@ class Payment extends Model
     public function booking()
     {
         return $this->belongsTo(Booking::class);
+    }
+
+    public function rentalRequest()
+    {
+        return $this->belongsTo(RentalRequest::class, 'rental_request_id');
     }
 
     public function verifiedBy()

@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Loader2, CreditCard, AlertCircle, Zap, CheckCircle, Clock } from 'lucide-react';
-import { formatCurrency } from '../utils/bookingDisplay';
+import {
+    formatCurrency,
+    resolveMinDpForTransaction,
+    parsePaymentAmountInput,
+} from '../utils/bookingDisplay';
 
 const PAYMENT_OPTIONS = [
     { label: 'QRIS (Gopay, OVO, Dana, LinkAja)', value: 'qris', method: 'qris' },
@@ -11,59 +15,66 @@ const PAYMENT_OPTIONS = [
     { label: 'Virtual Account Mandiri', value: 'mandiri_va', method: 'va' },
 ];
 
-// Tab choices saat status waiting_dp
 const DP_MODES = [
     { key: 'dp', label: 'Bayar DP', desc: 'Bayar sebagian sebagai uang muka' },
     { key: 'full_payment', label: 'Bayar Lunas', desc: 'Langsung lunasi seluruh tagihan' },
 ];
 
-export default function MidtransPaymentGateway({ bookingCode, contact, booking, onPaymentSuccess }) {
+export default function MidtransPaymentGateway({
+    transactionCode,
+    contact,
+    transactionData,
+    transactionType = 'booking', // 'booking' or 'rental'
+    onPaymentSuccess
+}) {
     const [amount, setAmount] = useState('');
     const [selectedOption, setSelectedOption] = useState('qris');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [dpMode, setDpMode] = useState('dp');
-
-    // Setelah Snap ditutup, tunjukkan "sedang diproses" sampai data terbaru diambil
     const [paymentJustSubmitted, setPaymentJustSubmitted] = useState(false);
 
-    const isDpStatus   = booking.status === 'waiting_dp';
-    const isSettlement = booking.status === 'confirmed' && booking.remaining_amount > 0;
+    const isDpStatus   = transactionData.status === 'waiting_dp';
+    const isSettlement = transactionData.status === 'confirmed' && transactionData.remaining_amount > 0;
+    const minDpAmount  = resolveMinDpForTransaction(transactionData);
+    const minDpPercent = Number(transactionData.min_dp_percent) || 40;
+    const totalPrice   = Number(transactionData.total_price) || 0;
 
     const paymentType = isDpStatus ? dpMode : 'settlement';
 
-    const pendingPayment = booking.payments?.find(
+    const pendingPayment = transactionData.payments?.find(
         p => p.status === 'pending' && p.payment_source === 'midtrans' && p.payment_type === paymentType
     );
     const hasSnapToken = !!pendingPayment?.snap_token;
 
     useEffect(() => {
-        if (isSettlement && booking.remaining_amount) {
-            setAmount(booking.remaining_amount.toString());
+        if (isSettlement && transactionData.remaining_amount) {
+            setAmount(transactionData.remaining_amount.toString());
         }
-    }, [isSettlement, booking.remaining_amount]);
+    }, [isSettlement, transactionData.remaining_amount]);
 
     useEffect(() => {
         if (dpMode === 'dp') setAmount('');
         setError('');
     }, [dpMode]);
 
-    // Reset "sedang diproses" saat data booking berhasil diperbarui
     useEffect(() => {
         setPaymentJustSubmitted(false);
-    }, [booking.payment_status, booking.status]);
+    }, [transactionData.payment_status, transactionData.status]);
 
     const handleCreatePayment = async (e) => {
         e.preventDefault();
         setError('');
 
         if (paymentType === 'dp') {
-            const numAmount = Number(amount);
-            if (!numAmount || numAmount < 500000) {
-                setError('Minimal pembayaran DP adalah Rp500.000');
+            const numAmount = parsePaymentAmountInput(amount);
+            if (!Number.isFinite(numAmount) || numAmount < minDpAmount) {
+                setError(
+                    `Minimal pembayaran DP adalah ${formatCurrency(minDpAmount)} (${minDpPercent}% dari total tagihan)`
+                );
                 return;
             }
-            if (numAmount >= booking.total_price) {
+            if (numAmount >= totalPrice) {
                 setError('Untuk pembayaran penuh, silakan pilih tab "Bayar Lunas"');
                 return;
             }
@@ -71,27 +82,31 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
 
         setLoading(true);
 
-        const option = PAYMENT_OPTIONS.find(o => o.value === selectedOption);
-        const backendMethod = option ? option.method : 'qris';
-
         let sendAmount;
-        if (paymentType === 'full_payment') sendAmount = booking.total_price;
-        else if (paymentType === 'settlement') sendAmount = booking.remaining_amount;
-        else sendAmount = amount;
+        if (paymentType === 'full_payment') sendAmount = transactionData.total_price;
+        else if (paymentType === 'settlement') sendAmount = transactionData.remaining_amount;
+        else sendAmount = parsePaymentAmountInput(amount);
+
+        const payload = {
+            contact:        contact,
+            payment_type:   paymentType,
+            amount:         sendAmount,
+            payment_method: selectedOption,
+        };
+
+        if (transactionType === 'booking') {
+            payload.booking_code = transactionCode;
+        } else {
+            payload.rental_code = transactionCode;
+        }
 
         try {
-            const response = await axios.post('/api/payments/create', {
-                booking_code:   bookingCode,
-                contact:        contact,
-                payment_type:   paymentType,
-                amount:         sendAmount,
-                payment_method: backendMethod,
-            });
+            const response = await axios.post('/api/payments/create', payload);
 
             if (response.data?.success && response.data?.data?.snap_token) {
-                triggerSnap(response.data.data.snap_token);
+                triggerSnap(response.data.data.snap_token, response.data.data.payment_id);
             } else {
-                setError('Gagal membuat pembayaran. Silakan coba lagi.');
+                setError(response.data?.message || 'Gagal membuat pembayaran. Silakan coba lagi.');
             }
         } catch (err) {
             setError(err.response?.data?.message || 'Terjadi kesalahan saat memproses pembayaran.');
@@ -101,10 +116,28 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
     };
 
     const handlePayNow = () => {
-        if (pendingPayment?.snap_token) triggerSnap(pendingPayment.snap_token);
+        if (pendingPayment?.snap_token) {
+            triggerSnap(pendingPayment.snap_token, pendingPayment.id);
+        }
     };
 
-    const triggerSnap = (snapToken) => {
+    const syncPaymentWithGateway = async (paymentId) => {
+        if (!paymentId) return;
+        try {
+            await axios.post(`/api/payments/${paymentId}/sync`);
+        } catch (err) {
+            console.warn('Payment sync failed', err);
+        }
+    };
+
+    const afterSnapClosed = async (paymentId) => {
+        await syncPaymentWithGateway(paymentId);
+        if (onPaymentSuccess) {
+            await onPaymentSuccess();
+        }
+    };
+
+    const triggerSnap = (snapToken, paymentId = null) => {
         if (!window.snap) {
             setError('Sistem pembayaran belum siap. Silakan refresh halaman.');
             return;
@@ -113,32 +146,30 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
         window.snap.pay(snapToken, {
             onSuccess: async () => {
                 setPaymentJustSubmitted(true);
-                if (onPaymentSuccess) await onPaymentSuccess();
+                await afterSnapClosed(paymentId);
             },
             onPending: async () => {
                 setPaymentJustSubmitted(true);
-                if (onPaymentSuccess) await onPaymentSuccess();
+                await afterSnapClosed(paymentId);
             },
             onError: () => {
                 setError('Pembayaran gagal. Silakan coba lagi.');
             },
             onClose: async () => {
-                // User menutup Snap tanpa tindakan — refresh data saja
-                if (onPaymentSuccess) await onPaymentSuccess();
+                await afterSnapClosed(paymentId);
             },
         });
     };
 
     if (!isDpStatus && !isSettlement) return null;
 
-    // Tampilkan pesan "sedang diproses" setelah pembayaran berhasil/pending dari Snap
     if (paymentJustSubmitted) {
         return (
             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 md:p-8 text-center">
                 <Clock size={32} className="text-blue-500 mx-auto mb-3 animate-pulse" />
                 <h3 className="font-semibold text-blue-800 mb-2">Pembayaran Sedang Diproses</h3>
                 <p className="text-sm text-blue-600">
-                    Pembayaran Anda sedang diverifikasi. Status booking akan diperbarui otomatis.
+                    Pembayaran Anda sedang diverifikasi. Status pesanan akan diperbarui otomatis.
                     Klik <strong>Perbarui</strong> di atas untuk memeriksa status terbaru.
                 </p>
             </div>
@@ -152,7 +183,6 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
                 {isDpStatus ? 'Pembayaran Uang Muka (DP)' : 'Pelunasan Tagihan'}
             </h3>
 
-            {/* Tab Bayar DP / Bayar Lunas (hanya saat waiting_dp) */}
             {isDpStatus && (
                 <div className="flex rounded-xl border border-beige overflow-hidden mb-6">
                     {DP_MODES.map((mode) => (
@@ -200,7 +230,6 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
                 </div>
             ) : (
                 <form onSubmit={handleCreatePayment} className="space-y-5">
-                    {/* Input nominal DP */}
                     {isDpStatus && dpMode === 'dp' && (
                         <div>
                             <label className="block text-sm font-medium text-charcoal mb-2">
@@ -210,17 +239,16 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
                                 type="number"
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
-                                placeholder="Min. 500.000"
+                                placeholder={`Min. ${minDpAmount.toLocaleString('id-ID')}`}
                                 className="w-full px-4 py-3 rounded-xl border border-beige bg-off-white/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                                 disabled={loading}
                             />
                             <p className="text-xs text-warm-grey mt-2">
-                                Minimal DP Rp500.000. Total tagihan: {formatCurrency(booking.total_price)}
+                                Minimal DP {formatCurrency(minDpAmount)} ({minDpPercent}% dari total). Total tagihan: {formatCurrency(transactionData.total_price)}
                             </p>
                         </div>
                     )}
 
-                    {/* Info bayar lunas */}
                     {isDpStatus && dpMode === 'full_payment' && (
                         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                             <div className="flex items-center gap-2 mb-2">
@@ -228,34 +256,32 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
                                 <span className="text-sm font-semibold text-green-800">Bayar Lunas Sekarang</span>
                             </div>
                             <p className="text-xs text-green-700 mb-3">
-                                Booking Anda akan langsung dikonfirmasi &amp; selesai setelah pembayaran berhasil.
+                                {transactionType === 'booking' ? 'Booking' : 'Sewa'} Anda akan langsung dikonfirmasi & selesai setelah pembayaran berhasil.
                             </p>
                             <div className="flex justify-between items-center">
                                 <span className="text-sm text-slate">Total yang dibayar:</span>
-                                <span className="text-lg font-bold text-primary">{formatCurrency(booking.total_price)}</span>
+                                <span className="text-lg font-bold text-primary">{formatCurrency(transactionData.total_price)}</span>
                             </div>
                         </div>
                     )}
 
-                    {/* Settlement info */}
                     {isSettlement && (
                         <div className="mb-4">
                             <div className="flex justify-between items-center py-2 border-b border-beige/50">
                                 <span className="text-sm text-slate">Total Biaya</span>
-                                <span className="font-medium">{formatCurrency(booking.total_price)}</span>
+                                <span className="font-medium">{formatCurrency(transactionData.total_price)}</span>
                             </div>
                             <div className="flex justify-between items-center py-2 border-b border-beige/50">
                                 <span className="text-sm text-slate">Sudah Dibayar</span>
-                                <span className="font-medium text-green-600">{formatCurrency(booking.paid_amount)}</span>
+                                <span className="font-medium text-green-600">{formatCurrency(transactionData.paid_amount)}</span>
                             </div>
                             <div className="flex justify-between items-center py-3">
                                 <span className="text-base font-semibold text-charcoal">Sisa Tagihan</span>
-                                <span className="text-lg font-bold text-primary">{formatCurrency(booking.remaining_amount)}</span>
+                                <span className="text-lg font-bold text-primary">{formatCurrency(transactionData.remaining_amount)}</span>
                             </div>
                         </div>
                     )}
 
-                    {/* Pilihan metode pembayaran */}
                     <div>
                         <label className="block text-sm font-medium text-charcoal mb-2">Metode Pembayaran</label>
                         <div className="grid grid-cols-1 gap-2">

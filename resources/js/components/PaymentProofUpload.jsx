@@ -7,9 +7,29 @@ const MAX_FILE_SIZE_KB = 5120;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_KB * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-export default function PaymentProofUpload({ bookingCode, contact, booking, onUploadSuccess }) {
-    const allowedTypes = booking?.allowed_payment_types || [];
-    const defaultPaymentType = allowedTypes[0] || 'dp';
+const paymentTypeLabel = {
+    dp: 'Down Payment (DP)',
+    settlement: 'Pelunasan',
+    full_payment: 'Bayar Lunas (Transfer Manual)',
+};
+
+/**
+ * Guest manual transfer proof upload (booking or rental).
+ */
+export default function PaymentProofUpload({
+    transactionCode,
+    contact,
+    transactionData,
+    transactionType = 'booking',
+    onUploadSuccess,
+}) {
+    const isRental = transactionType === 'rental';
+    const allowedTypes = transactionData?.allowed_payment_types || [];
+    const defaultPaymentType = allowedTypes[0] || 'settlement';
+
+    const uploadEndpoint = isRental
+        ? '/api/rental-requests/payment-proof'
+        : '/api/bookings/payment-proof';
 
     const [form, setForm] = useState({
         amount: '',
@@ -37,6 +57,21 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
             payment_type: allowedTypes.includes(prev.payment_type) ? prev.payment_type : defaultPaymentType,
         }));
     }, [defaultPaymentType, allowedTypes]);
+
+    useEffect(() => {
+        if (form.payment_type === 'settlement' && transactionData?.remaining_amount) {
+            setForm((prev) => ({
+                ...prev,
+                amount: prev.amount || String(transactionData.remaining_amount),
+            }));
+        }
+        if (form.payment_type === 'full_payment' && transactionData?.total_price && !form.amount) {
+            setForm((prev) => ({
+                ...prev,
+                amount: String(transactionData.total_price),
+            }));
+        }
+    }, [form.payment_type, transactionData?.remaining_amount, transactionData?.total_price]);
 
     const validateFile = (selectedFile) => {
         if (!selectedFile) {
@@ -114,7 +149,11 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
         setUploading(true);
 
         const formData = new FormData();
-        formData.append('booking_code', bookingCode);
+        if (isRental) {
+            formData.append('rental_code', transactionCode);
+        } else {
+            formData.append('booking_code', transactionCode);
+        }
         formData.append('contact', contact);
         formData.append('amount', form.amount);
         formData.append('payment_type', form.payment_type);
@@ -122,7 +161,7 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
         formData.append('proof_file', file);
 
         try {
-            const response = await axios.post('/api/bookings/payment-proof', formData, {
+            const response = await axios.post(uploadEndpoint, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
 
@@ -168,21 +207,22 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
         }
     };
 
-    const paymentTypeLabel = {
-        dp: 'Down Payment (DP)',
-        settlement: 'Pelunasan',
-        full_payment: 'Pembayaran Penuh',
-    };
+    const entityLabel = isRental ? 'sewa' : 'booking';
 
     return (
         <div className="bg-white rounded-2xl border border-beige p-6 md:p-8 shadow-sm">
             <h3 className="font-serif text-lg text-charcoal mb-5 flex items-center border-b border-beige pb-3">
                 <Upload size={20} className="mr-2 text-primary shrink-0" />
-                Upload Bukti Pembayaran
+                Upload Bukti Transfer Manual
             </h3>
 
             <p className="text-sm text-slate font-light mb-6 leading-relaxed">
-                Unggah bukti transfer untuk diverifikasi admin. Pastikan nominal dan metode pembayaran sesuai.
+                Alternatif jika tidak memakai pembayaran online: unggah bukti transfer untuk diverifikasi admin.
+                {form.payment_type === 'full_payment' && isRental && (
+                    <span className="block mt-2 text-warm-grey">
+                        Untuk DP sebagian, gunakan pembayaran online di atas.
+                    </span>
+                )}
             </p>
 
             {uploadSuccess && (
@@ -217,12 +257,18 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
                     </div>
                 )}
 
+                {allowedTypes.length === 1 && (
+                    <p className="text-sm text-charcoal font-medium">
+                        {paymentTypeLabel[allowedTypes[0]] || allowedTypes[0]}
+                    </p>
+                )}
+
                 <div>
                     <div className="flex items-center justify-between mb-2">
                         <label className="block text-sm font-medium text-charcoal">Nominal Pembayaran (Rp)</label>
-                        {form.payment_type === 'settlement' && booking?.remaining_amount && (
+                        {form.payment_type === 'settlement' && transactionData?.remaining_amount != null && (
                             <span className="text-xs bg-accent/10 text-accent px-2.5 py-1 rounded-full font-medium">
-                                Sisa: {formatCurrency(booking.remaining_amount)}
+                                Sisa: {formatCurrency(transactionData.remaining_amount)}
                             </span>
                         )}
                     </div>
@@ -233,10 +279,10 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
                         value={form.amount}
                         onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
                         placeholder={
-                            form.payment_type === 'settlement' && booking?.remaining_amount
-                                ? `Contoh: ${Number(booking.remaining_amount)}`
-                                : booking?.total_price
-                                ? `Contoh: ${Number(booking.total_price)}`
+                            form.payment_type === 'settlement' && transactionData?.remaining_amount
+                                ? `Contoh: ${Number(transactionData.remaining_amount)}`
+                                : transactionData?.total_price
+                                ? `Contoh: ${Number(transactionData.total_price)}`
                                 : 'Masukkan nominal'
                         }
                         className={`w-full px-4 py-3 rounded-xl border bg-off-white/50 focus:outline-none focus:ring-2 focus:ring-primary/30 ${
@@ -245,9 +291,9 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
                         disabled={uploading}
                     />
                     {fieldErrors.amount && <p className="text-red-600 text-xs mt-2">{fieldErrors.amount}</p>}
-                    {form.payment_type === 'settlement' && booking?.remaining_amount && (
+                    {form.payment_type === 'settlement' && transactionData?.remaining_amount && (
                         <p className="text-xs text-warm-grey mt-2">
-                            💡 Minimum pembayaran tersisa adalah {formatCurrency(booking.remaining_amount)}
+                            Sisa tagihan: {formatCurrency(transactionData.remaining_amount)}
                         </p>
                     )}
                 </div>
@@ -258,7 +304,7 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
                         type="text"
                         value={form.payment_method}
                         onChange={(e) => setForm((prev) => ({ ...prev, payment_method: e.target.value }))}
-                        placeholder="Bank Transfer, QRIS, dll."
+                        placeholder="BCA, Mandiri, QRIS, dll."
                         className={`w-full px-4 py-3 rounded-xl border bg-off-white/50 focus:outline-none focus:ring-2 focus:ring-primary/30 ${
                             fieldErrors.payment_method ? 'border-red-300' : 'border-beige'
                         }`}
@@ -323,9 +369,9 @@ export default function PaymentProofUpload({ bookingCode, contact, booking, onUp
                 </button>
             </form>
 
-            {booking?.total_price && (
+            {transactionData?.total_price && (
                 <p className="text-xs text-warm-grey text-center mt-4">
-                    Total booking: {formatCurrency(booking.total_price)}
+                    Total {entityLabel}: {formatCurrency(transactionData.total_price)}
                 </p>
             )}
         </div>

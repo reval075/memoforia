@@ -14,9 +14,9 @@ import {
     Clock,
     User,
 } from 'lucide-react';
-import { TRACKING_SESSION_KEY } from '../constants/tracking';
-import PaymentProofUpload from '../components/PaymentProofUpload';
+import { RENTAL_TRACKING_SESSION_KEY } from '../constants/tracking';
 import MidtransPaymentGateway from '../components/MidtransPaymentGateway';
+import PaymentProofUpload from '../components/PaymentProofUpload';
 import { art } from '@/design/artDirection';
 import EditorialStack from '@/components/art/EditorialStack';
 import ChunkyButton from '@/components/art/ChunkyButton';
@@ -63,7 +63,7 @@ function StatusBadge({ label, styleClass }) {
     );
 }
 
-export default function TrackBookingDetail() {
+export default function TrackRentalDetail() {
     const [session, setSession] = useState(null);
     const [checking, setChecking] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -72,14 +72,14 @@ export default function TrackBookingDetail() {
     const [clientDpExpired, setClientDpExpired] = useState(false);
 
     const loadSession = useCallback(() => {
-        const raw = sessionStorage.getItem(TRACKING_SESSION_KEY);
+        const raw = sessionStorage.getItem(RENTAL_TRACKING_SESSION_KEY);
         if (!raw) {
             return null;
         }
 
         const parsed = JSON.parse(raw);
-        if (!parsed?.booking_code || !parsed?.data) {
-            sessionStorage.removeItem(TRACKING_SESSION_KEY);
+        if (!parsed?.rental_code || !parsed?.data) {
+            sessionStorage.removeItem(RENTAL_TRACKING_SESSION_KEY);
             return null;
         }
 
@@ -95,7 +95,7 @@ export default function TrackBookingDetail() {
             }
             setSession(parsed);
         } catch {
-            sessionStorage.removeItem(TRACKING_SESSION_KEY);
+            sessionStorage.removeItem(RENTAL_TRACKING_SESSION_KEY);
             router.visit('/track-booking');
         } finally {
             setChecking(false);
@@ -103,29 +103,29 @@ export default function TrackBookingDetail() {
     }, [loadSession]);
 
     const refreshTrackingData = useCallback(async () => {
-        if (!session?.booking_code || !session?.contact) {
+        if (!session?.rental_code || !session?.contact) {
             return false;
         }
 
-        const response = await axios.post('/api/bookings/track', {
-            booking_code: session.booking_code,
+        const response = await axios.post('/api/rental-requests/track', {
+            rental_code: session.rental_code,
             contact: session.contact,
         });
 
         if (response.data?.success && response.data?.data) {
             const updated = {
-                booking_code: session.booking_code,
+                rental_code: session.rental_code,
                 contact: session.contact,
                 data: response.data.data,
                 fetchedAt: Date.now(),
             };
-            sessionStorage.setItem(TRACKING_SESSION_KEY, JSON.stringify(updated));
+            sessionStorage.setItem(RENTAL_TRACKING_SESSION_KEY, JSON.stringify(updated));
             setSession(updated);
             return true;
         }
 
         return false;
-    }, [session?.booking_code, session?.contact]);
+    }, [session?.rental_code, session?.contact]);
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -134,17 +134,15 @@ export default function TrackBookingDetail() {
         try {
             const ok = await refreshTrackingData();
             if (!ok) {
-                setFetchError('Gagal memperbarui data booking.');
+                setFetchError('Gagal memperbarui data sewa.');
             }
         } catch {
-            setFetchError('Gagal memperbarui data booking. Silakan coba lagi.');
+            setFetchError('Gagal memperbarui data sewa. Silakan coba lagi.');
         } finally {
             setRefreshing(false);
         }
     };
 
-    // Frontend-only DP countdown (per-minute). Backend remains source of truth.
-    // Hook MUST run on every render (no conditional placement).
     useEffect(() => {
         const status = session?.data?.status;
         const dpExpiredAt = session?.data?.dp_expired_at;
@@ -170,7 +168,7 @@ export default function TrackBookingDetail() {
     if (checking) {
         return (
             <GuestLayout>
-                <Head title="Memuat Detail Booking" />
+                <Head title="Memuat Detail Sewa" />
                 <div className="min-h-[70vh] flex items-center justify-center">
                     <Loader2 size={40} className="animate-spin text-primary" />
                 </div>
@@ -182,37 +180,29 @@ export default function TrackBookingDetail() {
         return null;
     }
 
-    const booking = session.data;
-    const statusMessage = getStatusMessage(booking);
-    const addons = booking.addons || [];
-    const payments = booking.payments || [];
-
-    const addonsTotal = addons.reduce(
-        (sum, addon) => sum + Number(addon.price || 0) * Number(addon.quantity || 0),
-        0
-    );
-    const packageSubtotal = booking.package_variant?.price
-        ? Number(booking.package_variant.price)
-        : Math.max(Number(booking.total_price || 0) - addonsTotal, 0);
+    const rental = session.data;
+    const statusMessage = getStatusMessage(rental, 'rental');
+    const items = rental.items || [];
+    const payments = rental.payments || [];
 
     const hasPendingManualPayment = payments.some((p) => p.status === 'pending' && p.payment_source === 'manual');
 
     const canShowMidtransSection =
-        !booking.is_dp_expired &&
+        !rental.is_dp_expired &&
         !clientDpExpired &&
-        (booking.status === 'waiting_dp' || (booking.status === 'confirmed' && booking.remaining_amount > 0)) &&
+        (rental.status === 'waiting_dp' || (rental.status === 'confirmed' && rental.remaining_amount > 0)) &&
         !hasPendingManualPayment;
 
     const canShowUploadSection =
-        booking.can_upload_proof &&
-        !booking.is_dp_expired &&
+        rental.can_upload_proof &&
+        !rental.is_dp_expired &&
         !clientDpExpired &&
         !hasPendingManualPayment &&
-        !['expired', 'cancelled', 'rejected', 'completed'].includes(booking.status);
+        !['expired', 'cancelled', 'rejected', 'completed'].includes(rental.status);
 
     return (
         <GuestLayout>
-            <Head title={`Detail Booking ${booking.booking_code}`} />
+            <Head title={`Detail Sewa ${rental.rental_code}`} />
 
             <section className={`${art.section.pad} max-w-4xl mx-auto min-h-[70vh] pt-28 md:pt-36`}>
                 <motion.div
@@ -222,8 +212,8 @@ export default function TrackBookingDetail() {
                 >
                     <div className="mb-10 md:mb-12">
                         <p className={`${art.type.label} mb-4`}>detail tracking</p>
-                        <EditorialStack lines={['Status', 'Booking']} lineClassName="type-display block" animate={false} />
-                        <p className="type-shout !text-2xl text-primary-dark mt-4 tabular-nums">{booking.booking_code}</p>
+                        <EditorialStack lines={['Status', 'Sewa']} lineClassName="type-display block" animate={false} />
+                        <p className="type-shout !text-2xl text-primary-dark mt-4 tabular-nums">{rental.rental_code}</p>
                     </div>
 
                     {fetchError && (
@@ -236,11 +226,11 @@ export default function TrackBookingDetail() {
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                             <div className="flex flex-wrap items-center gap-2">
                                 <StatusBadge
-                                    label={getStatusLabel(booking.status)}
-                                    styleClass={getStatusStyle(booking.status)}
+                                    label={getStatusLabel(rental.status)}
+                                    styleClass={getStatusStyle(rental.status)}
                                 />
                                 <StatusBadge
-                                    label={getPaymentStatusLabel(booking.payment_status)}
+                                    label={getPaymentStatusLabel(rental.payment_status)}
                                     styleClass="bg-off-white text-charcoal border-beige"
                                 />
                             </div>
@@ -256,11 +246,11 @@ export default function TrackBookingDetail() {
                             </p>
                         )}
 
-                        {booking.status === 'waiting_dp' && booking.dp_expired_at && (
+                        {rental.status === 'waiting_dp' && rental.dp_expired_at && (
                             <div className="mt-3 space-y-1">
                                 <p className={`text-xs font-semibold flex items-center gap-1 ${clientDpExpired ? 'text-orange-600' : 'text-blue-600'}`}>
                                     <Clock size={14} />
-                                    Batas pembayaran DP: {formatDateTime(booking.dp_expired_at)}
+                                    Batas pembayaran DP: {formatDateTime(rental.dp_expired_at)}
                                 </p>
                                 {dpCountdown && (
                                     <p className={`text-xs font-semibold ${clientDpExpired ? 'text-orange-600' : 'text-blue-600'}`}>
@@ -270,162 +260,112 @@ export default function TrackBookingDetail() {
                             </div>
                         )}
 
-                        {(booking.status === 'expired' || clientDpExpired) && (
+                        {(rental.status === 'expired' || clientDpExpired) && (
                             <p className="text-xs font-semibold text-orange-600 mt-3 flex items-center gap-1">
                                 <AlertCircle size={14} />
-                                Booking ini telah kedaluwarsa karena batas waktu DP terlewati.
+                                Sewa ini telah kedaluwarsa karena batas waktu DP terlewati.
                             </p>
                         )}
                     </LayeredCard>
 
                     <Reveal className="space-y-6 md:space-y-8" stagger staggerChildren={0.08}>
-                        {/* Booking & customer info */}
                         <RevealItem>
-                        <SectionCard title="Informasi Booking" icon={User}>
-                            <InfoRow label="Nama Pelanggan" value={booking.customer_name} />
-                            <InfoRow label="Email" value={booking.customer_email} />
-                            <InfoRow label="Nomor HP" value={booking.customer_phone} />
-                            <InfoRow label="Diajukan Pada" value={formatDateTime(booking.created_at)} />
-                            {booking.approved_at && (
-                                <InfoRow label="Disetujui Pada" value={formatDateTime(booking.approved_at)} />
+                        <SectionCard title="Informasi Penyewa" icon={User}>
+                            <InfoRow label="Nama" value={rental.customer_name} />
+                            <InfoRow label="Email" value={rental.customer_email} />
+                            <InfoRow label="Nomor HP" value={rental.customer_phone} />
+                            {rental.approved_at && (
+                                <InfoRow label="Disetujui Pada" value={formatDateTime(rental.approved_at)} />
                             )}
-                            {booking.confirmed_at && (
-                                <InfoRow label="Dikonfirmasi Pada" value={formatDateTime(booking.confirmed_at)} />
-                            )}
-                            {booking.cancelled_at && (
-                                <InfoRow label="Dibatalkan / Expired Pada" value={formatDateTime(booking.cancelled_at)} />
+                            {rental.confirmed_at && (
+                                <InfoRow label="Dikonfirmasi Pada" value={formatDateTime(rental.confirmed_at)} />
                             )}
                         </SectionCard>
                         </RevealItem>
 
                         <RevealItem>
-                        <SectionCard title="Detail Event" icon={Calendar}>
-                            <InfoRow label="Nama Event" value={booking.event_name} />
-                            <InfoRow label="Lokasi" value={booking.event_location} />
-                            <InfoRow label="Tanggal & Waktu" value={formatDateTime(booking.event_datetime)} />
+                        <SectionCard title="Jadwal Sewa" icon={Calendar}>
+                            <InfoRow label="Mulai Tanggal" value={rental.start_date} />
+                            <InfoRow label="Sampai Tanggal" value={rental.end_date} />
                         </SectionCard>
                         </RevealItem>
 
                         <RevealItem>
-                        <SectionCard title="Paket & Layanan" icon={Package}>
-                            <InfoRow label="Paket Jasa" value={booking.service_package?.name} />
-                            <InfoRow label="Varian" value={booking.package_variant?.name} />
-                            {booking.package_variant?.duration_hours != null && (
-                                <InfoRow
-                                    label="Durasi Operasional"
-                                    value={`${booking.package_variant.duration_hours} Jam`}
-                                />
-                            )}
-                            {booking.package_variant?.is_unlimited ? (
-                                <InfoRow label="Batas Cetak" value="Unlimited" />
-                            ) : booking.package_variant?.print_limit != null ? (
-                                <InfoRow
-                                    label="Batas Cetak"
-                                    value={`${booking.package_variant.print_limit} Lembar`}
-                                />
-                            ) : null}
-                            <InfoRow
-                                label="Template Frame"
-                                value={
-                                    booking.selected_template
-                                        ? `${booking.selected_template.name} (${booking.selected_template.size})`
-                                        : '-'
-                                }
-                            />
-
-                            {addons.length > 0 ? (
-                                <div className="mt-4 bg-off-white rounded-xl p-4 border border-beige/60">
-                                    <strong className="block text-primary text-sm mb-3">Addons Terpilih</strong>
-                                    <ul className="space-y-2 text-sm text-slate">
-                                        {addons.map((addon) => (
-                                            <li
-                                                key={addon.id}
-                                                className="flex flex-col sm:flex-row sm:justify-between gap-1"
-                                            >
-                                                <span>
-                                                    {addon.name} × {addon.quantity}
-                                                </span>
-                                                <span className="font-medium text-charcoal">
-                                                    {formatCurrency(
-                                                        Number(addon.price) * Number(addon.quantity)
-                                                    )}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ) : (
-                                <p className="text-sm text-warm-grey mt-4">Tidak ada addon tambahan.</p>
-                            )}
+                        <SectionCard title="Peralatan Disewa" icon={Package}>
+                            <ul className="space-y-3">
+                                {items.map((item) => (
+                                    <li key={item.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 border-b border-beige/50 last:border-0">
+                                        <div>
+                                            <span className="font-medium text-charcoal">{item.equipment_name}</span>
+                                            <span className="text-sm text-warm-grey block">Qty: {item.qty}</span>
+                                        </div>
+                                        <span className="font-medium text-charcoal mt-1 sm:mt-0">
+                                            {formatCurrency(item.price)}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
                         </SectionCard>
                         </RevealItem>
 
                         {canShowMidtransSection && (
+                            <RevealItem>
                             <MidtransPaymentGateway
-                                transactionCode={session.booking_code}
+                                transactionCode={session.rental_code}
                                 contact={session.contact}
-                                transactionData={booking}
-                                transactionType="booking"
+                                transactionData={rental}
+                                transactionType="rental"
                                 onPaymentSuccess={refreshTrackingData}
                             />
+                            </RevealItem>
                         )}
 
                         {canShowUploadSection && (
+                            <RevealItem>
                             <PaymentProofUpload
-                                transactionCode={session.booking_code}
+                                transactionCode={session.rental_code}
                                 contact={session.contact}
-                                transactionData={booking}
-                                transactionType="booking"
+                                transactionData={rental}
+                                transactionType="rental"
                                 onUploadSuccess={refreshTrackingData}
                             />
+                            </RevealItem>
                         )}
 
-                        {hasPendingManualPayment && (
-                            <div className="bg-blue-50 border border-blue-100 text-blue-700 px-5 py-4 rounded-2xl text-sm mt-6">
-                                Bukti pembayaran manual Anda sedang menunggu verifikasi admin.
+                        {rental.is_settlement_overdue && rental.status === 'confirmed' && (
+                            <RevealItem>
+                            <div className="bg-orange-50 border border-orange-200 text-orange-800 px-5 py-4 rounded-2xl text-sm">
+                                <strong>Batas pelunasan terlewati.</strong> Segera lunasi sisa tagihan atau hubungi admin.
                             </div>
+                            </RevealItem>
                         )}
 
                         <RevealItem>
                         <SectionCard title="Ringkasan Pembayaran" icon={CreditCard}>
-                            <InfoRow label="Subtotal Paket" value={formatCurrency(packageSubtotal)} />
-                            <InfoRow label="Total Addons" value={formatCurrency(addonsTotal)} />
                             <InfoRow
-                                label="Total Pembayaran"
-                                value={formatCurrency(booking.total_price)}
+                                label="Total Biaya Sewa"
+                                value={formatCurrency(rental.total_price)}
                             />
 
-                            {/* Payment Summary Section (NEW) */}
                             <div className="mt-6 pt-6 border-t border-beige">
                                 <h4 className="text-sm font-semibold text-charcoal mb-3">Status Pembayaran</h4>
                                 <div className="bg-off-white rounded-xl p-4 border border-beige/60 space-y-3">
                                     <InfoRow
                                         label="Sudah Dibayar"
-                                        value={formatCurrency(booking.paid_amount || 0)}
+                                        value={formatCurrency(rental.paid_amount || 0)}
                                     />
                                     <InfoRow
                                         label="Sisa Tagihan"
-                                        value={formatCurrency(booking.remaining_amount || 0)}
+                                        value={formatCurrency(rental.remaining_amount || 0)}
                                     />
 
-                                    {booking.settlement_due_at && booking.status === 'confirmed' && (
+                                    {rental.settlement_due_at && rental.status === 'confirmed' && (
                                         <InfoRow
                                             label="Batas Pelunasan"
-                                            value={formatDateTime(booking.settlement_due_at)}
+                                            value={formatDateTime(rental.settlement_due_at)}
                                         />
                                     )}
                                 </div>
-
-                                {/* Overdue Alert (NEW) */}
-                                {booking.is_settlement_overdue && (
-                                    <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
-                                        <AlertCircle size={18} className="shrink-0 mt-0.5" />
-                                        <span>
-                                            <strong>Pelunasan Terlambat</strong><br/>
-                                            Pelunasan telah melewati batas waktu. Silakan lakukan pembayaran secepatnya.
-                                        </span>
-                                    </div>
-                                )}
                             </div>
 
                             <div className="mt-6">
@@ -472,11 +412,11 @@ export default function TrackBookingDetail() {
                         </SectionCard>
                         </RevealItem>
 
-                        {booking.notes && (
+                        {rental.notes && (
                             <RevealItem>
                             <SectionCard title="Catatan" icon={MapPin}>
                                 <p className="text-sm text-slate leading-relaxed whitespace-pre-wrap">
-                                    {booking.notes}
+                                    {rental.notes}
                                 </p>
                             </SectionCard>
                             </RevealItem>
@@ -485,10 +425,10 @@ export default function TrackBookingDetail() {
 
                     <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
                         <ChunkyButton href="/track-booking" className="w-full sm:w-auto justify-center">
-                            Lacak Booking Lain
+                            Lacak Pesanan Lain
                         </ChunkyButton>
-                        <ChunkyButton href="/booking" variant="secondary" className="w-full sm:w-auto justify-center">
-                            Buat Booking Baru
+                        <ChunkyButton href="/rentals" variant="secondary" className="w-full sm:w-auto justify-center">
+                            Sewa Peralatan Baru
                         </ChunkyButton>
                     </div>
                 </motion.div>

@@ -4,7 +4,7 @@ import axios from 'axios';
 import { Calendar, Package, Check, X, Trash2, Edit2, Plus, LogOut, Loader2, ListCollapse, Image, Sparkles } from 'lucide-react';
 
 export default function Dashboard() {
-    const { auth } = usePage().props;
+    const { auth, initialRentals = [], pendingRentalCount = 0 } = usePage().props;
     const form = useForm();
 
     const [activeTab, setActiveTab] = useState('bookings');
@@ -12,6 +12,7 @@ export default function Dashboard() {
 
     // Data lists
     const [bookings, setBookings] = useState([]);
+    const [rentals, setRentals] = useState(Array.isArray(initialRentals) ? initialRentals : []);
     const [packages, setPackages] = useState([]);
     const [addons, setAddons] = useState([]);
     const [templates, setTemplates] = useState([]);
@@ -36,8 +37,9 @@ export default function Dashboard() {
     const [templateForm, setTemplateForm] = useState({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', is_active: true });
     const [isEditingTemplate, setIsEditingTemplate] = useState(false);
 
-    // Filters
-    const [statusFilter, setStatusFilter] = useState('');
+    // Filters (separate per tab — shared filter caused empty rental list when booking filter didn't match)
+    const [bookingStatusFilter, setBookingStatusFilter] = useState('');
+    const [rentalStatusFilter, setRentalStatusFilter] = useState('pending_approval');
 
     const logout = (event) => {
         event.preventDefault();
@@ -52,10 +54,41 @@ export default function Dashboard() {
     // Load Data Helpers
     const loadBookings = () => {
         setLoading(true);
-        axios.get(`/admin/api/bookings?status=${statusFilter}`)
-            .then(res => setBookings(res.data.data))
-            .catch(() => showMsg('Gagal memuat booking.', 'error'))
+        const params = new URLSearchParams();
+        if (bookingStatusFilter) {
+            params.set('status', bookingStatusFilter);
+        }
+        axios.get(`/admin/api/bookings?${params.toString()}`)
+            .then((res) => setBookings(Array.isArray(res.data?.data) ? res.data.data : []))
+            .catch((err) => {
+                console.error('loadBookings failed', err);
+                showMsg(err.response?.data?.message || 'Gagal memuat booking.', 'error');
+                setBookings([]);
+            })
             .finally(() => setLoading(false));
+    };
+
+    const loadRentals = () => {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (rentalStatusFilter) {
+            params.set('status', rentalStatusFilter);
+        }
+        axios.get(`/admin/api/rentals?${params.toString()}`)
+            .then((res) => setRentals(Array.isArray(res.data?.data) ? res.data.data : []))
+            .catch((err) => {
+                console.error('loadRentals failed', err);
+                showMsg(err.response?.data?.message || 'Gagal memuat data sewa.', 'error');
+            })
+            .finally(() => setLoading(false));
+    };
+
+    const openRentalsTab = () => {
+        setActiveTab('rentals');
+    };
+
+    const openBookingsTab = () => {
+        setActiveTab('bookings');
     };
 
     const loadPackages = () => {
@@ -83,8 +116,16 @@ export default function Dashboard() {
     };
 
     useEffect(() => {
-        loadBookings();
-    }, [statusFilter]);
+        if (activeTab === 'bookings') {
+            loadBookings();
+        }
+    }, [bookingStatusFilter, activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'rentals') {
+            loadRentals();
+        }
+    }, [rentalStatusFilter, activeTab]);
 
     useEffect(() => {
         loadPackages();
@@ -143,6 +184,57 @@ export default function Dashboard() {
                     loadBlockedDates();
                 })
                 .catch(err => showMsg(err.response?.data?.message || 'Gagal membatalkan booking.', 'error'));
+        }
+    };
+
+    // Rental Actions
+    const handleRentalApprove = (id) => {
+        axios.post(`/admin/api/rentals/${id}/approve`)
+            .then(res => {
+                showMsg(res.data.message);
+                loadRentals();
+            })
+            .catch(err => showMsg(err.response?.data?.message || 'Gagal menyetujui sewa.', 'error'));
+    };
+
+    const handleRentalReject = (id) => {
+        const reason = prompt('Masukkan alasan penolakan sewa:');
+        if (reason !== null) {
+            axios.post(`/admin/api/rentals/${id}/reject`, { notes: reason })
+                .then(res => {
+                    showMsg(res.data.message);
+                    loadRentals();
+                })
+                .catch(err => showMsg(err.response?.data?.message || 'Gagal menolak sewa.', 'error'));
+        }
+    };
+
+    const handleRentalVerifyPayment = (paymentId, status) => {
+        axios.post(`/admin/api/rentals-payments/${paymentId}/verify`, { status })
+            .then(res => {
+                showMsg(res.data.message);
+                loadRentals();
+            })
+            .catch(err => showMsg(err.response?.data?.message || 'Gagal verifikasi pembayaran.', 'error'));
+    };
+
+    const handleCompleteRental = (id) => {
+        axios.post(`/admin/api/rentals/${id}/complete`)
+            .then(res => {
+                showMsg(res.data.message);
+                loadRentals();
+            })
+            .catch(err => showMsg(err.response?.data?.message || 'Gagal menyelesaikan sewa.', 'error'));
+    };
+
+    const handleCancelRental = (id) => {
+        if (confirm('Batalkan penyewaan ini?')) {
+            axios.post(`/admin/api/rentals/${id}/cancel`)
+                .then(res => {
+                    showMsg(res.data.message);
+                    loadRentals();
+                })
+                .catch(err => showMsg(err.response?.data?.message || 'Gagal membatalkan sewa.', 'error'));
         }
     };
 
@@ -336,6 +428,14 @@ export default function Dashboard() {
         return { text: `${hours}j ${mins}m tersisa`, isExpired: false };
     };
 
+    const sumVerifiedPayments = (payments = []) =>
+        payments
+            .filter((p) => p.status === 'verified')
+            .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const isManualPayment = (pay) =>
+        pay.payment_source === 'manual' || (!!pay.proof_image && pay.payment_source !== 'midtrans');
+
     return (
         <div className="min-h-screen bg-[#F8F9FC] font-sans antialiased text-charcoal">
             {/* Header */}
@@ -367,10 +467,22 @@ export default function Dashboard() {
             <div className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
                 {/* Sidebar Navigation */}
                 <div className="lg:col-span-1 space-y-2">
-                    <button onClick={() => setActiveTab('bookings')}
+                    <button onClick={openBookingsTab}
                         className={`w-full flex items-center space-x-3 px-6 py-4 rounded-2xl text-left font-medium transition-all ${activeTab === 'bookings' ? 'bg-primary text-white shadow-lg' : 'bg-white hover:bg-beige text-charcoal'}`}>
                         <ListCollapse size={18} />
                         <span>Booking approvals</span>
+                    </button>
+                    <button onClick={openRentalsTab}
+                        className={`w-full flex items-center space-x-3 px-6 py-4 rounded-2xl text-left font-medium transition-all ${activeTab === 'rentals' ? 'bg-primary text-white shadow-lg' : 'bg-white hover:bg-beige text-charcoal'}`}>
+                        <Package size={18} />
+                        <span className="flex-1">Rental approvals</span>
+                        {pendingRentalCount > 0 && (
+                            <span className={`min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-bold text-center ${
+                                activeTab === 'rentals' ? 'bg-white text-primary' : 'bg-primary text-white'
+                            }`}>
+                                {pendingRentalCount}
+                            </span>
+                        )}
                     </button>
                     <button onClick={() => setActiveTab('calendar')}
                         className={`w-full flex items-center space-x-3 px-6 py-4 rounded-2xl text-left font-medium transition-all ${activeTab === 'calendar' ? 'bg-primary text-white shadow-lg' : 'bg-white hover:bg-beige text-charcoal'}`}>
@@ -395,7 +507,7 @@ export default function Dashboard() {
                                     <h2 className="font-serif text-2xl text-charcoal">Booking Requests Pipeline</h2>
                                     <p className="text-xs text-warm-grey">Verify customer events, manage waitlists, and verify DP/full payments</p>
                                 </div>
-                                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="mt-4 sm:mt-0 px-4 py-2 border border-beige rounded-xl bg-off-white text-sm focus:outline-none">
+                                <select value={bookingStatusFilter} onChange={e => setBookingStatusFilter(e.target.value)} className="mt-4 sm:mt-0 px-4 py-2 border border-beige rounded-xl bg-off-white text-sm focus:outline-none">
                                     <option value="">Semua Status</option>
                                     <option value="pending_approval">Pending Approval</option>
                                     <option value="waiting_dp">Waiting DP</option>
@@ -477,11 +589,14 @@ export default function Dashboard() {
                                                                     <p>📂 <strong>Bukti Gambar:</strong> <a href={pay.proof_image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Lihat Gambar</a></p>
                                                                     <p>📋 <strong>Status:</strong> <span className="font-semibold">{pay.status}</span></p>
                                                                 </div>
-                                                                {pay.status === 'pending' && (
+                                                                {pay.status === 'pending' && isManualPayment(pay) && (
                                                                     <div className="flex space-x-2">
                                                                         <button onClick={() => handleVerifyPayment(pay.id, 'verified')} className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-full"><Check size={14} /></button>
                                                                         <button onClick={() => handleVerifyPayment(pay.id, 'rejected')} className="bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full"><X size={14} /></button>
                                                                     </div>
+                                                                )}
+                                                                {pay.status === 'pending' && pay.payment_source === 'midtrans' && (
+                                                                    <span className="text-[10px] text-warm-grey uppercase">Menunggu gateway</span>
                                                                 )}
                                                             </div>
                                                         ))}
@@ -521,6 +636,167 @@ export default function Dashboard() {
                                         <div className="text-center py-16 text-warm-grey">
                                             <ListCollapse size={40} className="mx-auto mb-2 opacity-50" />
                                             <p className="font-light">Tidak ada data booking pada kategori status ini.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TAB: RENTALS APPROVAL & PAYMENTS */}
+                    {activeTab === 'rentals' && (
+                        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-primary-50">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 pb-4 border-b border-beige">
+                                <div>
+                                    <h2 className="font-serif text-2xl text-charcoal">Rental Requests Pipeline</h2>
+                                    <p className="text-xs text-warm-grey">Manage equipment rentals, approve requests, and verify payments</p>
+                                </div>
+                                <select value={rentalStatusFilter} onChange={e => setRentalStatusFilter(e.target.value)} className="mt-4 sm:mt-0 px-4 py-2 border border-beige rounded-xl bg-off-white text-sm focus:outline-none">
+                                    <option value="">Semua Status</option>
+                                    <option value="pending_approval">Menunggu Persetujuan</option>
+                                    <option value="waiting_dp">Waiting DP</option>
+                                    <option value="confirmed">Confirmed</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="cancelled">Cancelled</option>
+                                    <option value="expired">Expired</option>
+                                </select>
+                            </div>
+
+                            {loading ? (
+                                <div className="flex items-center justify-center py-16">
+                                    <Loader2 className="animate-spin text-primary" size={32} />
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {rentals.map(rental => (
+                                        <div key={rental.id} className="border border-beige rounded-2xl p-6 hover:shadow-md transition-shadow bg-white">
+                                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-beige pb-3 mb-4">
+                                                <div>
+                                                    <span className="text-xs font-semibold text-primary">{rental.rental_code}</span>
+                                                    <h3 className="font-serif text-lg text-charcoal">Rental Alat #{rental.id}</h3>
+                                                </div>
+                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase border ${getStatusStyle(rental.status)}`}>
+                                                    {rental.status === 'pending_approval' ? 'menunggu persetujuan' : rental.status.replace('_', ' ')}
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate mb-6">
+                                                <div>
+                                                    <p>👤 <strong>Customer:</strong> {rental.customer_name} ({rental.customer_phone})</p>
+                                                    <p>✉️ <strong>Email:</strong> {rental.customer_email}</p>
+                                                    <p>📅 <strong>Rent Dates:</strong> {rental.start_date} s/d {rental.end_date}</p>
+                                                    {rental.status === 'waiting_dp' && rental.dp_expired_at && (() => {
+                                                        const exp = formatExpiration(rental.dp_expired_at);
+                                                        if (!exp) return null;
+                                                        return <p className={`text-xs font-semibold mt-1 ${exp.isExpired ? 'text-orange-600' : 'text-blue-600'}`}>⏰ {exp.isExpired ? '⚠️ ' : ''}Batas DP: {new Date(rental.dp_expired_at).toLocaleString('id-ID')} ({exp.text})</p>;
+                                                    })()}
+                                                    {rental.status === 'expired' && <p className="text-xs font-semibold text-orange-600 mt-1">⚠️ Sewa expired — batas waktu DP terlewati</p>}
+                                                </div>
+                                                <div>
+                                                    <p>💵 <strong>Total Price:</strong> Rp {Number(rental.total_price).toLocaleString('id-ID')}</p>
+                                                    <p>💳 <strong>Payment status:</strong> <span className="font-semibold uppercase text-xs">{rental.payment_status?.replace('_', ' ')}</span></p>
+                                                    {(() => {
+                                                        const paid = sumVerifiedPayments(rental.payments);
+                                                        const remaining = Math.max(0, Number(rental.total_price || 0) - paid);
+                                                        return (
+                                                            <>
+                                                                <p>✅ <strong>Dibayar:</strong> Rp {paid.toLocaleString('id-ID')}</p>
+                                                                <p>📌 <strong>Sisa:</strong> Rp {remaining.toLocaleString('id-ID')}</p>
+                                                            </>
+                                                        );
+                                                    })()}
+                                                    {rental.status === 'confirmed' && rental.settlement_due_at && (
+                                                        <p className="text-xs font-semibold text-amber-700 mt-1">
+                                                            ⏳ Batas pelunasan: {new Date(rental.settlement_due_at).toLocaleString('id-ID')}
+                                                        </p>
+                                                    )}
+                                                    <p className="text-xs text-primary mt-2">
+                                                        🔗 Pelanggan lacak: <span className="font-mono">/track-booking</span> · kode <strong>{rental.rental_code}</strong>
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Items List */}
+                                            {rental.items?.length > 0 && (
+                                                <div className="bg-off-white rounded-xl p-4 text-xs mb-6 border border-beige/60">
+                                                    <strong className="block text-primary mb-1">Peralatan Disewa:</strong>
+                                                    <ul className="list-disc list-inside space-y-1 text-slate">
+                                                        {rental.items.map(item => (
+                                                            <li key={item.id}>{item.equipment?.name || 'Unknown Item'} (x{item.qty}) - Rp {Number(item.price).toLocaleString('id-ID')}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+
+                                            {rental.notes && (
+                                                <div className="bg-off-white rounded-xl p-4 text-xs italic mb-6">
+                                                    <strong>Catatan:</strong> {rental.notes}
+                                                </div>
+                                            )}
+
+                                            {/* Payments Proofs Verification */}
+                                            {rental.payments?.length > 0 && (
+                                                <div className="bg-blue-50/20 border border-blue-100 rounded-xl p-4 mb-6">
+                                                    <strong className="block text-xs uppercase tracking-wider text-blue-700 mb-2">Riwayat Bukti Transfer:</strong>
+                                                    <div className="space-y-3">
+                                                        {rental.payments.map(pay => (
+                                                            <div key={pay.id} className="flex items-center justify-between border-b border-blue-50/50 pb-2 last:border-b-0 last:pb-0">
+                                                                <div className="text-xs">
+                                                                    <p>💰 <strong>Nominal:</strong> Rp {Number(pay.amount).toLocaleString('id-ID')} ({pay.payment_type?.replace('_', ' ')})</p>
+                                                                    <p>🏦 <strong>Metode:</strong> {pay.payment_method} · <span className="uppercase">{pay.payment_source || 'manual'}</span></p>
+                                                                    {pay.proof_image && (
+                                                                        <p>📂 <strong>Bukti:</strong> <a href={pay.proof_image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Lihat Gambar</a></p>
+                                                                    )}
+                                                                    <p>📋 <strong>Status:</strong> <span className="font-semibold">{pay.status}</span></p>
+                                                                </div>
+                                                                {pay.status === 'pending' && isManualPayment(pay) && (
+                                                                    <div className="flex space-x-2">
+                                                                        <button onClick={() => handleRentalVerifyPayment(pay.id, 'verified')} className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-full"><Check size={14} /></button>
+                                                                        <button onClick={() => handleRentalVerifyPayment(pay.id, 'rejected')} className="bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full"><X size={14} /></button>
+                                                                    </div>
+                                                                )}
+                                                                {pay.status === 'pending' && pay.payment_source === 'midtrans' && (
+                                                                    <span className="text-[10px] text-warm-grey uppercase">Menunggu gateway</span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Actions */}
+                                            <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-beige">
+                                                {rental.status === 'pending_approval' && (
+                                                    <>
+                                                        <button onClick={() => handleRentalApprove(rental.id)} className="flex items-center space-x-1 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-full text-xs font-semibold transition-colors shadow-md">
+                                                            <Check size={14} /> <span>Approve (Waiting DP)</span>
+                                                        </button>
+                                                        <button onClick={() => handleRentalReject(rental.id)} className="flex items-center space-x-1 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-semibold transition-colors">
+                                                            <X size={14} /> <span>Reject</span>
+                                                        </button>
+                                                    </>
+                                                )}
+
+                                                {rental.status === 'confirmed' && rental.payment_status === 'paid' && (
+                                                    <button onClick={() => handleCompleteRental(rental.id)} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition-colors">
+                                                        Selesaikan Sewa (Completed)
+                                                    </button>
+                                                )}
+
+                                                {['waiting_dp', 'confirmed'].includes(rental.status) && (
+                                                    <button onClick={() => handleCancelRental(rental.id)} className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-semibold transition-colors">
+                                                        Batalkan Sewa
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {rentals.length === 0 && (
+                                        <div className="text-center py-16 text-warm-grey">
+                                            <Package size={40} className="mx-auto mb-2 opacity-50" />
+                                            <p className="font-light">Tidak ada data penyewaan pada kategori status ini.</p>
                                         </div>
                                     )}
                                 </div>

@@ -13,6 +13,7 @@ export default function Rentals() {
     const [showForm, setShowForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [rentalCode, setRentalCode] = useState('');
     const [error, setError] = useState('');
 
     const [form, setForm] = useState({
@@ -64,7 +65,8 @@ export default function Rentals() {
                 ...form,
                 items: cart.map(c => ({ equipment_id: c.equipment_id, qty: c.qty })),
             };
-            await axios.post('/api/rental-requests', payload);
+            const res = await axios.post('/api/rental-requests', payload);
+            setRentalCode(res.data.rental_code || '');
             setSuccess(true);
         } catch (err) {
             setError(err.response?.data?.message || 'Terjadi kesalahan.');
@@ -81,13 +83,28 @@ export default function Rentals() {
 
     if (success) {
         return (
-            <GuestLayout><Head title="Rental Submitted" />
+            <GuestLayout><Head title="Pengajuan Berhasil" />
                 <section className="py-24 px-6 min-h-[70vh] flex items-center justify-center">
                     <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center max-w-lg mx-auto bg-white p-12 rounded-3xl shadow-xl">
                         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle size={40} className="text-green-500" /></div>
                         <h2 className="text-3xl font-serif mb-4">Pengajuan Sewa Berhasil!</h2>
-                        <p className="text-slate font-light mb-6">Terima kasih, <strong>{form.customer_name}</strong>. Tim kami akan menghubungi Anda untuk konfirmasi ketersediaan dan pembayaran.</p>
-                        <a href="/" className="inline-block bg-primary text-white px-8 py-3 rounded-full hover:bg-primary-dark transition-all">Kembali ke Home</a>
+                        <p className="text-slate font-light mb-4">Terima kasih, <strong>{form.customer_name}</strong>. Tim kami akan segera meninjau pengajuan Anda.</p>
+                        {rentalCode && (
+                            <div className="bg-beige rounded-2xl p-5 mb-6">
+                                <p className="text-xs text-warm-grey uppercase tracking-wider mb-1">Kode Sewa Anda</p>
+                                <p className="text-2xl font-bold font-mono text-primary tracking-wider">{rentalCode}</p>
+                                <p className="text-xs text-warm-grey mt-2">Simpan kode ini untuk melacak status dan membayar sewa Anda.</p>
+                            </div>
+                        )}
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            {rentalCode && (
+                                <a href={`/track-booking?code=${encodeURIComponent(rentalCode)}`}
+                                    className="bg-primary text-white px-8 py-3 rounded-full hover:bg-primary-dark transition-all font-medium">
+                                    Lacak Status Sewa
+                                </a>
+                            )}
+                            <a href="/" className="border border-beige text-charcoal px-8 py-3 rounded-full hover:bg-beige transition-all">Kembali ke Home</a>
+                        </div>
                     </motion.div>
                 </section>
             </GuestLayout>
@@ -195,34 +212,34 @@ export default function Rentals() {
                                 <div className="space-y-5">
                                     <div>
                                         <label className="block text-sm text-charcoal mb-2 font-medium">Nama Lengkap *</label>
-                                        <input type="text" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})}
+                                        <input type="text" value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })}
                                             className="w-full px-5 py-3 rounded-xl border-2 border-beige focus:border-primary focus:outline-none transition-colors bg-off-white" placeholder="Nama Anda" />
                                     </div>
                                     <div>
                                         <label className="block text-sm text-charcoal mb-2 font-medium">Email</label>
-                                        <input type="email" value={form.customer_email} onChange={e => setForm({...form, customer_email: e.target.value})}
+                                        <input type="email" value={form.customer_email} onChange={e => setForm({ ...form, customer_email: e.target.value })}
                                             className="w-full px-5 py-3 rounded-xl border-2 border-beige focus:border-primary focus:outline-none transition-colors bg-off-white" placeholder="email@contoh.com" />
                                     </div>
                                     <div>
                                         <label className="block text-sm text-charcoal mb-2 font-medium">No. Telepon / WhatsApp</label>
-                                        <input type="tel" value={form.customer_phone} onChange={e => setForm({...form, customer_phone: e.target.value})}
+                                        <input type="tel" value={form.customer_phone} onChange={e => setForm({ ...form, customer_phone: e.target.value })}
                                             className="w-full px-5 py-3 rounded-xl border-2 border-beige focus:border-primary focus:outline-none transition-colors bg-off-white" placeholder="0812-xxxx-xxxx" />
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm text-charcoal mb-2 font-medium">Tanggal Mulai *</label>
-                                            <input type="date" value={form.start_date} onChange={e => setForm({...form, start_date: e.target.value})}
+                                            <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })}
                                                 className="w-full px-5 py-3 rounded-xl border-2 border-beige focus:border-primary focus:outline-none transition-colors bg-off-white" />
                                         </div>
                                         <div>
                                             <label className="block text-sm text-charcoal mb-2 font-medium">Tanggal Selesai *</label>
-                                            <input type="date" value={form.end_date} onChange={e => setForm({...form, end_date: e.target.value})}
+                                            <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })}
                                                 className="w-full px-5 py-3 rounded-xl border-2 border-beige focus:border-primary focus:outline-none transition-colors bg-off-white" />
                                         </div>
                                     </div>
                                     <div>
                                         <label className="block text-sm text-charcoal mb-2 font-medium">Catatan</label>
-                                        <textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={3}
+                                        <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={3}
                                             className="w-full px-5 py-3 rounded-xl border-2 border-beige focus:border-primary focus:outline-none transition-colors bg-off-white resize-none" placeholder="Permintaan khusus..." />
                                     </div>
 
