@@ -753,13 +753,15 @@ class BookingController extends Controller
                 'price' => $addon->pivot->price,
             ])->values(),
             'payments' => $booking->payments->map(fn ($payment) => [
-                'id' => $payment->id,
-                'amount' => $payment->amount,
-                'payment_type' => $payment->payment_type,
+                'id'             => $payment->id,
+                'amount'         => $payment->amount,
+                'payment_type'   => $payment->payment_type,
                 'payment_method' => $payment->payment_method,
-                'status' => $payment->status,
-                'created_at' => $payment->created_at,
-                'verified_at' => $payment->verified_at,
+                'status'         => $payment->status instanceof \BackedEnum ? $payment->status->value : $payment->status,
+                'payment_source' => $payment->payment_source,   // 'midtrans' | 'manual' | null
+                'snap_token'     => $payment->snap_token,        // needed by MidtransPaymentGateway
+                'created_at'     => $payment->created_at,
+                'verified_at'    => $payment->verified_at,
             ])->values(),
         ];
     }

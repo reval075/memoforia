@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, CreditCard, AlertCircle } from 'lucide-react';
+import { Loader2, CreditCard, AlertCircle, Zap } from 'lucide-react';
 import { formatCurrency } from '../utils/bookingDisplay';
+
+const PAYMENT_OPTIONS = [
+    { label: 'QRIS (Gopay, OVO, Dana, LinkAja)', value: 'qris', method: 'qris' },
+    { label: 'Virtual Account BCA', value: 'bca_va', method: 'va' },
+    { label: 'Virtual Account BNI', value: 'bni_va', method: 'va' },
+    { label: 'Virtual Account BRI', value: 'bri_va', method: 'va' },
+    { label: 'Virtual Account Mandiri', value: 'mandiri_va', method: 'va' },
+];
 
 export default function MidtransPaymentGateway({ bookingCode, contact, booking, onPaymentSuccess }) {
     const [amount, setAmount] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState('qris');
+    const [selectedOption, setSelectedOption] = useState('qris');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     
@@ -45,13 +53,17 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
 
         setLoading(true);
 
+        // Map selected option to backend-accepted 'va' or 'qris'
+        const option = PAYMENT_OPTIONS.find(o => o.value === selectedOption);
+        const backendMethod = option ? option.method : 'qris';
+
         try {
             const response = await axios.post('/api/payments/create', {
                 booking_code: bookingCode,
                 contact: contact,
                 payment_type: paymentType,
                 amount: isSettlement ? booking.remaining_amount : amount,
-                payment_method: paymentMethod,
+                payment_method: backendMethod,
             });
 
             if (response.data?.success && response.data?.data?.snap_token) {
@@ -169,24 +181,30 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
 
                     <div>
                         <label className="block text-sm font-medium text-charcoal mb-2">Metode Pembayaran</label>
-                        <select
-                            value={paymentMethod}
-                            onChange={(e) => setPaymentMethod(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl border border-beige bg-off-white/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                            disabled={loading}
-                        >
-                            <option value="qris">QRIS (Gopay, OVO, Dana, LinkAja)</option>
-                            <option value="bca_va">BCA Virtual Account</option>
-                            <option value="bni_va">BNI Virtual Account</option>
-                            <option value="bri_va">BRI Virtual Account</option>
-                            <option value="mandiri_va">Mandiri Virtual Account</option>
-                        </select>
+                        <div className="grid grid-cols-1 gap-2">
+                            {PAYMENT_OPTIONS.map(opt => (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setSelectedOption(opt.value)}
+                                    disabled={loading}
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm text-left transition-all ${
+                                        selectedOption === opt.value
+                                            ? 'border-primary bg-primary/5 text-primary font-medium'
+                                            : 'border-beige bg-off-white/50 text-charcoal hover:border-primary/40'
+                                    }`}
+                                >
+                                    <Zap size={16} className={selectedOption === opt.value ? 'text-primary' : 'text-warm-grey'} />
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
                     <button
                         type="submit"
-                        disabled={loading || (isDp && !amount)}
-                        className="w-full flex items-center justify-center gap-2 bg-primary text-white px-8 py-3.5 rounded-full hover:bg-primary-dark transition-all disabled:opacity-60 disabled:cursor-not-allowed font-medium"
+                        disabled={loading || (isDp && !amount) || !selectedOption}
+                        className="w-full flex items-center justify-center gap-2 bg-primary text-white px-8 py-3.5 rounded-full hover:bg-primary-dark transition-all disabled:opacity-60 disabled:cursor-not-allowed font-medium mt-2"
                     >
                         {loading ? (
                             <>

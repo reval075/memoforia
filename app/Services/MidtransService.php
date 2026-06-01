@@ -150,7 +150,7 @@ class MidtransService
                 'payment_type' => $paymentMethod === 'va' ? 'bank_transfer' : 'qris',
                 'expiry' => [
                     'unit' => 'hours',
-                    'length' => 24, // 24 hours expiry
+                    'duration' => 24, // 24 hours expiry
                 ],
             ];
 
