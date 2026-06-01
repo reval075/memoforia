@@ -45,7 +45,7 @@ class MidtransPaymentTest extends TestCase
     /**
      * Test: Contact validation accepts valid email
      */
-    public function test_payment_create_accepts_valid_email()
+    public function test_payment_create_accepts_email_contact()
     {
         $this->booking->update(['customer_email' => 'test@example.com']);
 
@@ -67,7 +67,7 @@ class MidtransPaymentTest extends TestCase
     /**
      * Test: Contact validation accepts same phone different format
      */
-    public function test_payment_create_accepts_same_phone_different_format()
+    public function test_payment_create_accepts_phone_contact()
     {
         $this->booking->update(['customer_phone' => '08123456789']);
 
@@ -89,7 +89,7 @@ class MidtransPaymentTest extends TestCase
     /**
      * Test: Contact validation rejects different phone
      */
-    public function test_payment_create_rejects_different_phone()
+    public function test_payment_create_rejects_invalid_contact()
     {
         $this->booking->update(['customer_phone' => '08123456789']);
 

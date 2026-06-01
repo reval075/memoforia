@@ -29,6 +29,14 @@ class MidtransService
         Config::$isProduction = config('midtrans.is_production', false);
         Config::$isSanitized = config('midtrans.is_sanitized', true);
         Config::$is3ds = config('midtrans.is_3ds', true);
+
+        // Debug logging for Midtrans Config
+        Log::info('Midtrans Config Initialized', [
+            'is_production' => Config::$isProduction,
+            'merchant_id_set' => !empty(config('midtrans.merchant_id')),
+            'server_key_set' => !empty(Config::$serverKey),
+            'client_key_set' => !empty(Config::$clientKey),
+        ]);
     }
 
     /**
