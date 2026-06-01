@@ -54,14 +54,16 @@ Route::get('/pricelist', function () {
     ]);
 });
 
-Route::get('/branches', function () {
-    return Inertia::render('Branches', [
-        'branches' => \App\Models\Branch::with('booths')
+Route::redirect('/branches', '/locations', 301);
+
+Route::get('/locations', function () {
+    return Inertia::render('Locations', [
+        'locations' => \App\Models\Branch::with('booths')
             ->where('is_active', true)
             ->orderBy('name')
             ->get(),
     ]);
-});
+})->name('locations.index');
 
 // Authentication Routes
 Route::middleware('guest')->group(function () {

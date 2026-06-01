@@ -27,7 +27,7 @@ export default function GuestLayout({ children }) {
                         <div>
                             <h4 className="font-sans text-sm uppercase tracking-widest text-accent mb-6">Quick Links</h4>
                             <ul className="space-y-3">
-                                {['Home', 'Book Studio', 'Rentals', 'Pricelist', 'Branches'].map((item) => (
+                                {['Home', 'Book Studio', 'Rentals', 'Pricelist', 'Locations'].map((item) => (
                                     <li key={item}><a href="#" className="text-white/60 hover:text-white transition-colors text-sm">{item}</a></li>
                                 ))}
                             </ul>
