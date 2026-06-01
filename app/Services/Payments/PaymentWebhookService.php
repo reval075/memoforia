@@ -101,6 +101,8 @@ class PaymentWebhookService
                         $this->bookingPaymentService->confirmBookingAfterDp($booking);
                     } elseif ($payment->payment_type === 'settlement') {
                         $this->bookingPaymentService->completeBookingAfterSettlement($booking);
+                    } elseif ($payment->payment_type === 'full_payment') {
+                        $this->bookingPaymentService->completeBookingAfterFullPayment($booking);
                     }
                 }
 

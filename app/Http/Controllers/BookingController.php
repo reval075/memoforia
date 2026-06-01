@@ -550,31 +550,51 @@ class BookingController extends Controller
                         throw new \Exception('Tanggal ini sudah dikonfirmasi oleh booking lain. Tidak dapat melakukan double confirmation.');
                     }
 
-                    $booking->update([
-                        'status' => 'confirmed',
-                        'confirmed_at' => now(),
-                        'payment_status' => 'partially_paid',
-                        'settlement_due_at' => Carbon::parse($booking->event_date)->addDays(2)->endOfDay(),
-                    ]);
+                    // Flush cached relationship so the just-verified payment is counted
+                    $booking->unsetRelation('payments');
+
+                    $totalPaid = $booking->payments()
+                        ->where('status', \App\Enums\PaymentStatus::Verified)
+                        ->sum('amount');
+
+                    $dueDate = Carbon::parse($booking->event_date)->addDays(2)->endOfDay();
+
+                    if ($totalPaid >= $booking->total_price) {
+                        // DP covers full amount — mark as completed directly
+                        $booking->update([
+                            'status'            => 'completed',
+                            'confirmed_at'      => now(),
+                            'completed_at'      => now(),
+                            'payment_status'    => 'paid',
+                            'settlement_due_at' => $dueDate,
+                        ]);
+                    } else {
+                        $booking->update([
+                            'status'            => 'confirmed',
+                            'confirmed_at'      => now(),
+                            'payment_status'    => 'partially_paid',
+                            'settlement_due_at' => $dueDate,
+                        ]);
+                    }
 
                     // 6. Auto-cancel competing bookings on the same date (inside transaction)
                     Booking::where('event_date', $booking->event_date)
                         ->where('id', '!=', $booking->id)
                         ->whereIn('status', ['pending_approval', 'waiting_dp'])
                         ->update([
-                            'status' => 'cancelled',
+                            'status'       => 'cancelled',
                             'cancelled_at' => now(),
-                            'notes' => 'Otomatis dibatalkan karena pelanggan lain telah membayar DP terlebih dahulu pada tanggal ini.'
+                            'notes'        => 'Otomatis dibatalkan karena pelanggan lain telah membayar DP terlebih dahulu pada tanggal ini.'
                         ]);
 
                 } elseif ($payment->payment_type === 'settlement' || $payment->payment_type === 'full_payment') {
                     // Settlement/full payment can only be processed on active booking flows.
-                    if (! in_array($booking->status, ['waiting_dp', 'confirmed'])) {
+                    if (! in_array($booking->status, ['waiting_dp', 'confirmed', 'completed'])) {
                         throw new \Exception('Booking tidak dalam status valid untuk verifikasi settlement/full payment.');
                     }
 
-                    // If this payment would confirm the booking, enforce the same date-conflict protection.
-                    if ($booking->status !== 'confirmed') {
+                    // If this payment would confirm the booking from waiting_dp, enforce date-conflict protection.
+                    if (! in_array($booking->status, ['confirmed', 'completed'])) {
                         $conflictExists = Booking::where('event_date', $booking->event_date)
                             ->where('id', '!=', $booking->id)
                             ->whereIn('status', ['confirmed', 'completed'])
@@ -586,29 +606,39 @@ class BookingController extends Controller
                         }
                     }
 
-                    $booking->update([
-                        'payment_status' => 'paid',
-                    ]);
+                    // Flush cached relationship so the just-updated payment is included in sum
+                    $booking->unsetRelation('payments');
 
-                    // Verify total amount paid
+                    // Verify total amount paid (including the payment we just verified above)
                     $totalPaid = $booking->payments()
                         ->where('status', \App\Enums\PaymentStatus::Verified)
                         ->sum('amount');
 
                     if ($totalPaid >= $booking->total_price && $booking->status !== 'completed') {
+                        $dueDate = Carbon::parse($booking->event_date)->addDays(2)->endOfDay();
+
                         $booking->update([
-                            'status' => 'completed',
-                            'completed_at' => now(),
+                            'status'            => 'completed',
+                            'confirmed_at'      => $booking->confirmed_at ?? now(),
+                            'completed_at'      => now(),
+                            'settlement_due_at' => $booking->settlement_due_at ?? $dueDate,
+                            'payment_status'    => 'paid',
                         ]);
 
+                        // Cancel competing bookings on the same date
                         Booking::where('event_date', $booking->event_date)
                             ->where('id', '!=', $booking->id)
                             ->whereIn('status', ['pending_approval', 'waiting_dp'])
                             ->update([
-                                'status' => 'cancelled',
+                                'status'       => 'cancelled',
                                 'cancelled_at' => now(),
-                                'notes' => 'Otomatis dibatalkan karena pelanggan lain telah menyelesaikan pembayaran terlebih dahulu pada tanggal ini.'
+                                'notes'        => 'Otomatis dibatalkan karena pelanggan lain telah menyelesaikan pembayaran terlebih dahulu pada tanggal ini.'
                             ]);
+                    } else {
+                        // Partial settlement — just update payment_status
+                        $booking->update([
+                            'payment_status' => $totalPaid > 0 ? 'partially_paid' : $booking->payment_status,
+                        ]);
                     }
                 }
 

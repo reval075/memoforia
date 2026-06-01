@@ -73,14 +73,14 @@ class MidtransService
      * Create settlement transaction
      *
      * @param Booking $booking
+     * @param string $paymentMethod (va, qris)
      * @return array
      */
-    public function createSettlementTransaction(Booking $booking): array
+    public function createSettlementTransaction(Booking $booking, string $paymentMethod = 'va'): array
     {
-        // Calculate remaining amount
+        // Calculate remaining amount (from ALL verified payments, not just DP)
         $paidAmount = $booking->payments()
             ->where('status', 'verified')
-            ->where('payment_type', 'dp')
             ->sum('amount');
 
         $remainingAmount = $booking->total_price - $paidAmount;
@@ -89,12 +89,35 @@ class MidtransService
             throw new Exception('Tidak ada sisa pembayaran');
         }
 
-        // Settlement always uses VA (no method choice)
         $transaction = $this->createSnapTransaction(
             booking: $booking,
             amount: $remainingAmount,
             paymentType: 'settlement',
-            paymentMethod: 'va'
+            paymentMethod: $paymentMethod
+        );
+
+        return $transaction;
+    }
+
+    /**
+     * Create Full Payment transaction (Lunas from waiting_dp)
+     *
+     * @param Booking $booking
+     * @param float $amount
+     * @param string $paymentMethod (va, qris)
+     * @return array
+     */
+    public function createFullPaymentTransaction(Booking $booking, float $amount, string $paymentMethod): array
+    {
+        if ($amount <= 0) {
+            throw new Exception('Nominal pembayaran tidak valid');
+        }
+
+        $transaction = $this->createSnapTransaction(
+            booking: $booking,
+            amount: $amount,
+            paymentType: 'full_payment',
+            paymentMethod: $paymentMethod
         );
 
         return $transaction;

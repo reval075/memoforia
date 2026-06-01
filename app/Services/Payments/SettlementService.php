@@ -30,19 +30,6 @@ class SettlementService
             ], 422);
         }
 
-        $dpPaid = $booking->payments()
-            ->where('payment_type', 'dp')
-            ->where('status', PaymentStatus::Verified)
-            ->exists();
-
-        if (!$dpPaid) {
-            return response()->json([
-                'success' => false,
-                'message' => 'DP belum dibayarkan',
-                'data'    => null,
-            ], 422);
-        }
-
         $alreadyPaid     = $booking->payments()->where('status', PaymentStatus::Verified)->sum('amount');
         $remainingAmount = $booking->total_price - $alreadyPaid;
 
@@ -78,9 +65,13 @@ class SettlementService
                 'booking_id'       => $booking->id,
                 'booking_code'     => $booking->booking_code,
                 'remaining_amount' => $remainingAmount,
+                'method'           => $validated['payment_method'] ?? 'va',
             ]);
 
-            $transaction = $this->midtransService->createSettlementTransaction($booking);
+            $transaction = $this->midtransService->createSettlementTransaction(
+                $booking,
+                $validated['payment_method'] ?? 'va'
+            );
 
             $this->logPayment('settlement_payment_created', [
                 'booking_id'        => $booking->id,

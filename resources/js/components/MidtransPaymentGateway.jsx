@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, CreditCard, AlertCircle, Zap } from 'lucide-react';
+import { Loader2, CreditCard, AlertCircle, Zap, CheckCircle, Clock } from 'lucide-react';
 import { formatCurrency } from '../utils/bookingDisplay';
 
 const PAYMENT_OPTIONS = [
@@ -11,67 +11,85 @@ const PAYMENT_OPTIONS = [
     { label: 'Virtual Account Mandiri', value: 'mandiri_va', method: 'va' },
 ];
 
+// Tab choices saat status waiting_dp
+const DP_MODES = [
+    { key: 'dp', label: 'Bayar DP', desc: 'Bayar sebagian sebagai uang muka' },
+    { key: 'full_payment', label: 'Bayar Lunas', desc: 'Langsung lunasi seluruh tagihan' },
+];
+
 export default function MidtransPaymentGateway({ bookingCode, contact, booking, onPaymentSuccess }) {
     const [amount, setAmount] = useState('');
     const [selectedOption, setSelectedOption] = useState('qris');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    
-    // Determine the active payment intent based on booking state
-    const isDp = booking.status === 'waiting_dp';
-    const isSettlement = booking.status === 'confirmed' && booking.remaining_amount > 0;
-    const paymentType = isDp ? 'dp' : 'settlement';
+    const [dpMode, setDpMode] = useState('dp');
 
-    // Check for existing pending midtrans payment for the current intent
+    // Setelah Snap ditutup, tunjukkan "sedang diproses" sampai data terbaru diambil
+    const [paymentJustSubmitted, setPaymentJustSubmitted] = useState(false);
+
+    const isDpStatus   = booking.status === 'waiting_dp';
+    const isSettlement = booking.status === 'confirmed' && booking.remaining_amount > 0;
+
+    const paymentType = isDpStatus ? dpMode : 'settlement';
+
     const pendingPayment = booking.payments?.find(
         p => p.status === 'pending' && p.payment_source === 'midtrans' && p.payment_type === paymentType
     );
     const hasSnapToken = !!pendingPayment?.snap_token;
 
     useEffect(() => {
-        // Pre-fill amount for settlement
         if (isSettlement && booking.remaining_amount) {
             setAmount(booking.remaining_amount.toString());
         }
     }, [isSettlement, booking.remaining_amount]);
 
+    useEffect(() => {
+        if (dpMode === 'dp') setAmount('');
+        setError('');
+    }, [dpMode]);
+
+    // Reset "sedang diproses" saat data booking berhasil diperbarui
+    useEffect(() => {
+        setPaymentJustSubmitted(false);
+    }, [booking.payment_status, booking.status]);
+
     const handleCreatePayment = async (e) => {
         e.preventDefault();
         setError('');
 
-        if (isDp) {
+        if (paymentType === 'dp') {
             const numAmount = Number(amount);
             if (!numAmount || numAmount < 500000) {
                 setError('Minimal pembayaran DP adalah Rp500.000');
                 return;
             }
-            if (numAmount > booking.total_price) {
-                setError('Nominal DP tidak boleh melebihi total tagihan');
+            if (numAmount >= booking.total_price) {
+                setError('Untuk pembayaran penuh, silakan pilih tab "Bayar Lunas"');
                 return;
             }
         }
 
         setLoading(true);
 
-        // Map selected option to backend-accepted 'va' or 'qris'
         const option = PAYMENT_OPTIONS.find(o => o.value === selectedOption);
         const backendMethod = option ? option.method : 'qris';
 
+        let sendAmount;
+        if (paymentType === 'full_payment') sendAmount = booking.total_price;
+        else if (paymentType === 'settlement') sendAmount = booking.remaining_amount;
+        else sendAmount = amount;
+
         try {
             const response = await axios.post('/api/payments/create', {
-                booking_code: bookingCode,
-                contact: contact,
-                payment_type: paymentType,
-                amount: isSettlement ? booking.remaining_amount : amount,
+                booking_code:   bookingCode,
+                contact:        contact,
+                payment_type:   paymentType,
+                amount:         sendAmount,
                 payment_method: backendMethod,
             });
 
             if (response.data?.success && response.data?.data?.snap_token) {
-                const snapToken = response.data.data.snap_token;
-                triggerSnap(snapToken);
-                if (onPaymentSuccess) {
-                    onPaymentSuccess();
-                }
+                triggerSnap(response.data.data.snap_token);
             } else {
                 setError('Gagal membuat pembayaran. Silakan coba lagi.');
             }
@@ -83,40 +101,79 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
     };
 
     const handlePayNow = () => {
-        if (pendingPayment?.snap_token) {
-            triggerSnap(pendingPayment.snap_token);
-        }
+        if (pendingPayment?.snap_token) triggerSnap(pendingPayment.snap_token);
     };
 
     const triggerSnap = (snapToken) => {
-        if (window.snap) {
-            window.snap.pay(snapToken, {
-                onSuccess: function(result){
-                    if(onPaymentSuccess) onPaymentSuccess();
-                },
-                onPending: function(result){
-                    if(onPaymentSuccess) onPaymentSuccess();
-                },
-                onError: function(result){
-                    setError('Pembayaran gagal atau dibatalkan.');
-                },
-                onClose: function(){
-                    if(onPaymentSuccess) onPaymentSuccess();
-                }
-            });
-        } else {
+        if (!window.snap) {
             setError('Sistem pembayaran belum siap. Silakan refresh halaman.');
+            return;
         }
+
+        window.snap.pay(snapToken, {
+            onSuccess: async () => {
+                setPaymentJustSubmitted(true);
+                if (onPaymentSuccess) await onPaymentSuccess();
+            },
+            onPending: async () => {
+                setPaymentJustSubmitted(true);
+                if (onPaymentSuccess) await onPaymentSuccess();
+            },
+            onError: () => {
+                setError('Pembayaran gagal. Silakan coba lagi.');
+            },
+            onClose: async () => {
+                // User menutup Snap tanpa tindakan — refresh data saja
+                if (onPaymentSuccess) await onPaymentSuccess();
+            },
+        });
     };
 
-    if (!isDp && !isSettlement) return null;
+    if (!isDpStatus && !isSettlement) return null;
+
+    // Tampilkan pesan "sedang diproses" setelah pembayaran berhasil/pending dari Snap
+    if (paymentJustSubmitted) {
+        return (
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 md:p-8 text-center">
+                <Clock size={32} className="text-blue-500 mx-auto mb-3 animate-pulse" />
+                <h3 className="font-semibold text-blue-800 mb-2">Pembayaran Sedang Diproses</h3>
+                <p className="text-sm text-blue-600">
+                    Pembayaran Anda sedang diverifikasi. Status booking akan diperbarui otomatis.
+                    Klik <strong>Perbarui</strong> di atas untuk memeriksa status terbaru.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-white rounded-2xl border border-beige p-6 md:p-8 shadow-sm">
             <h3 className="font-serif text-lg text-charcoal mb-5 flex items-center border-b border-beige pb-3">
                 <CreditCard size={20} className="mr-2 text-primary shrink-0" />
-                {isDp ? 'Pembayaran Uang Muka (DP)' : 'Pelunasan Tagihan'}
+                {isDpStatus ? 'Pembayaran Uang Muka (DP)' : 'Pelunasan Tagihan'}
             </h3>
+
+            {/* Tab Bayar DP / Bayar Lunas (hanya saat waiting_dp) */}
+            {isDpStatus && (
+                <div className="flex rounded-xl border border-beige overflow-hidden mb-6">
+                    {DP_MODES.map((mode) => (
+                        <button
+                            key={mode.key}
+                            type="button"
+                            onClick={() => setDpMode(mode.key)}
+                            className={`flex-1 px-4 py-3 text-sm font-medium transition-all text-left ${
+                                dpMode === mode.key
+                                    ? 'bg-primary text-white'
+                                    : 'bg-off-white text-charcoal hover:bg-beige/60'
+                            }`}
+                        >
+                            <span className="block font-semibold">{mode.label}</span>
+                            <span className={`text-xs ${dpMode === mode.key ? 'text-white/80' : 'text-warm-grey'}`}>
+                                {mode.desc}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-4 rounded-2xl mb-6 text-sm flex items-start gap-2">
@@ -143,25 +200,44 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
                 </div>
             ) : (
                 <form onSubmit={handleCreatePayment} className="space-y-5">
-                    {isDp && (
+                    {/* Input nominal DP */}
+                    {isDpStatus && dpMode === 'dp' && (
                         <div>
                             <label className="block text-sm font-medium text-charcoal mb-2">
-                                Nominal Pembayaran (Rp)
+                                Nominal Pembayaran DP (Rp)
                             </label>
                             <input
                                 type="number"
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
-                                placeholder="Min. 500000"
+                                placeholder="Min. 500.000"
                                 className="w-full px-4 py-3 rounded-xl border border-beige bg-off-white/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                                 disabled={loading}
                             />
                             <p className="text-xs text-warm-grey mt-2">
-                                Minimal DP adalah Rp500.000. Total tagihan: {formatCurrency(booking.total_price)}
+                                Minimal DP Rp500.000. Total tagihan: {formatCurrency(booking.total_price)}
                             </p>
                         </div>
                     )}
 
+                    {/* Info bayar lunas */}
+                    {isDpStatus && dpMode === 'full_payment' && (
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <CheckCircle size={18} className="text-green-600 shrink-0" />
+                                <span className="text-sm font-semibold text-green-800">Bayar Lunas Sekarang</span>
+                            </div>
+                            <p className="text-xs text-green-700 mb-3">
+                                Booking Anda akan langsung dikonfirmasi &amp; selesai setelah pembayaran berhasil.
+                            </p>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-slate">Total yang dibayar:</span>
+                                <span className="text-lg font-bold text-primary">{formatCurrency(booking.total_price)}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Settlement info */}
                     {isSettlement && (
                         <div className="mb-4">
                             <div className="flex justify-between items-center py-2 border-b border-beige/50">
@@ -179,6 +255,7 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
                         </div>
                     )}
 
+                    {/* Pilihan metode pembayaran */}
                     <div>
                         <label className="block text-sm font-medium text-charcoal mb-2">Metode Pembayaran</label>
                         <div className="grid grid-cols-1 gap-2">
@@ -203,7 +280,7 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
 
                     <button
                         type="submit"
-                        disabled={loading || (isDp && !amount) || !selectedOption}
+                        disabled={loading || (isDpStatus && dpMode === 'dp' && !amount) || !selectedOption}
                         className="w-full flex items-center justify-center gap-2 bg-primary text-white px-8 py-3.5 rounded-full hover:bg-primary-dark transition-all disabled:opacity-60 disabled:cursor-not-allowed font-medium mt-2"
                     >
                         {loading ? (
@@ -212,7 +289,11 @@ export default function MidtransPaymentGateway({ bookingCode, contact, booking, 
                                 <span>Memproses...</span>
                             </>
                         ) : (
-                            <span>{isDp ? 'Buat Pembayaran DP' : 'Lunasi Sekarang'}</span>
+                            <span>
+                                {isDpStatus && dpMode === 'dp'          ? 'Buat Pembayaran DP' : null}
+                                {isDpStatus && dpMode === 'full_payment' ? 'Lunasi Sekarang'    : null}
+                                {isSettlement                            ? 'Lunasi Sekarang'    : null}
+                            </span>
                         )}
                     </button>
                 </form>

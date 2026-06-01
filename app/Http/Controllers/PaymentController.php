@@ -35,8 +35,8 @@ class PaymentController extends Controller
             $validated = $request->validate([
                 'booking_code'   => 'required|string|exists:bookings,booking_code',
                 'contact'        => 'required|string',
-                'payment_type'   => 'required|in:dp,settlement',
-                'amount'         => 'required_if:payment_type,dp|numeric|min:500000',
+                'payment_type'   => 'required|in:dp,settlement,full_payment',
+                'amount'         => 'nullable|numeric|min:1',
                 'payment_method' => 'required|in:va,qris',
             ]);
 
@@ -52,6 +52,8 @@ class PaymentController extends Controller
 
             if ($validated['payment_type'] === 'dp') {
                 return $this->bookingPaymentService->createDpPayment($booking, $validated);
+            } elseif ($validated['payment_type'] === 'full_payment') {
+                return $this->bookingPaymentService->createFullPayment($booking, $validated);
             } else {
                 return $this->settlementService->createSettlementPayment($booking, $validated);
             }

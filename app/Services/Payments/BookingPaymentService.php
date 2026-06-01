@@ -121,6 +121,83 @@ class BookingPaymentService
     }
 
     /**
+     * Create Full Payment (Lunas) — for bookings in 'waiting_dp' status
+     * Customer chooses to pay the entire amount upfront instead of DP first.
+     */
+    public function createFullPayment(Booking $booking, array $validated): \Illuminate\Http\JsonResponse
+    {
+        if (!in_array($booking->status, ['waiting_dp'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pembayaran lunas hanya tersedia saat booking menunggu DP.',
+                'data'    => null,
+            ], 422);
+        }
+
+        $totalAmount = (float) $booking->total_price;
+
+        // Check if there's already a pending full_payment transaction
+        $pendingFullPayment = $booking->payments()
+            ->where('payment_type', 'full_payment')
+            ->where('status', PaymentStatus::Pending)
+            ->first();
+
+        if ($pendingFullPayment) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Transaksi pembayaran lunas sedang menunggu pembayaran',
+                'data'    => [
+                    'payment_id' => $pendingFullPayment->id,
+                    'snap_token' => $pendingFullPayment->snap_token,
+                    'order_id'   => $pendingFullPayment->midtrans_order_id,
+                    'amount'     => $pendingFullPayment->amount,
+                    'expired_at' => $pendingFullPayment->gateway_expired_at,
+                ],
+            ]);
+        }
+
+        try {
+            $this->logPayment('full_payment_creation_started', [
+                'booking_id'   => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'amount'       => $totalAmount,
+                'method'       => $validated['payment_method'],
+            ]);
+
+            $transaction = $this->midtransService->createFullPaymentTransaction(
+                $booking,
+                $totalAmount,
+                $validated['payment_method']
+            );
+
+            $this->logPayment('full_payment_created', [
+                'booking_id'        => $booking->id,
+                'booking_code'      => $booking->booking_code,
+                'payment_reference' => $transaction['order_id'] ?? null,
+                'amount'            => $totalAmount,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transaksi pembayaran lunas berhasil dibuat',
+                'data'    => $transaction,
+            ], 201);
+        } catch (\Exception $e) {
+            $this->logPaymentError('full_payment_creation_failed', [
+                'booking_id'   => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'error'        => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data'    => null,
+            ], 400);
+        }
+    }
+
+    /**
      * Get booking payment tracking with eager loading
      */
     public function getBookingPaymentTracking(string $bookingCode)
@@ -213,7 +290,8 @@ class BookingPaymentService
 
     /**
      * Mutate booking state after DP
-     * Assumes running inside a DB::transaction
+     * Assumes running inside a DB::transaction.
+     * If the DP amount covers the total price, booking is completed immediately.
      */
     public function confirmBookingAfterDp(Booking $booking): void
     {
@@ -221,15 +299,43 @@ class BookingPaymentService
             return;
         }
 
+        // Recalculate total paid AFTER the DP payment was already marked verified
+        $totalPaid = $booking->payments()
+            ->where('status', PaymentStatus::Verified)
+            ->sum('amount');
+
         $eventDate = \Carbon\Carbon::parse($booking->event_date);
         $dueDate   = $eventDate->copy()->addDays(2)->endOfDay();
 
-        $booking->update([
-            'status'            => 'confirmed',
-            'confirmed_at'      => now(),
-            'settlement_due_at' => $dueDate,
-            'payment_status'    => 'partially_paid',
-        ]);
+        if ($totalPaid >= $booking->total_price) {
+            // Full amount covered by this DP — mark as completed
+            $booking->update([
+                'status'            => 'completed',
+                'confirmed_at'      => now(),
+                'completed_at'      => now(),
+                'settlement_due_at' => $dueDate,
+                'payment_status'    => 'paid',
+            ]);
+
+            $this->logPayment('booking_completed_via_dp_full_payment', [
+                'booking_id'   => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'total_paid'   => $totalPaid,
+            ]);
+        } else {
+            $booking->update([
+                'status'            => 'confirmed',
+                'confirmed_at'      => now(),
+                'settlement_due_at' => $dueDate,
+                'payment_status'    => 'partially_paid',
+            ]);
+
+            $this->logPayment('booking_confirmed', [
+                'booking_id'        => $booking->id,
+                'booking_code'      => $booking->booking_code,
+                'settlement_due_at' => $dueDate->toDateTimeString(),
+            ]);
+        }
 
         Booking::where('event_date', $booking->event_date)
             ->where('id', '!=', $booking->id)
@@ -239,12 +345,6 @@ class BookingPaymentService
                 'cancelled_at' => now(),
                 'notes'        => 'Otomatis dibatalkan karena tanggal telah dikonfirmasi oleh customer lain.',
             ]);
-
-        $this->logPayment('booking_confirmed', [
-            'booking_id'        => $booking->id,
-            'booking_code'      => $booking->booking_code,
-            'settlement_due_at' => $dueDate->toDateTimeString(),
-        ]);
     }
 
     /**
@@ -285,5 +385,43 @@ class BookingPaymentService
                 'total_price'  => $booking->total_price,
             ]);
         }
+    }
+
+    /**
+     * Mutate booking state after Full Payment (Lunas dari status waiting_dp)
+     * Assumes running inside a DB::transaction
+     */
+    public function completeBookingAfterFullPayment(Booking $booking): void
+    {
+        if ($booking->status === 'completed') {
+            return;
+        }
+
+        $eventDate = \Carbon\Carbon::parse($booking->event_date);
+        $dueDate   = $eventDate->copy()->addDays(2)->endOfDay();
+
+        $booking->update([
+            'status'            => 'completed',
+            'confirmed_at'      => now(),
+            'completed_at'      => now(),
+            'settlement_due_at' => $dueDate,
+            'payment_status'    => 'paid',
+        ]);
+
+        // Cancel competing bookings on the same date
+        Booking::where('event_date', $booking->event_date)
+            ->where('id', '!=', $booking->id)
+            ->whereIn('status', ['pending_approval', 'waiting_dp'])
+            ->update([
+                'status'       => 'cancelled',
+                'cancelled_at' => now(),
+                'notes'        => 'Otomatis dibatalkan karena pelanggan lain telah melunasi pembayaran pada tanggal ini.',
+            ]);
+
+        $this->logPayment('booking_completed_via_full_payment', [
+            'booking_id'   => $booking->id,
+            'booking_code' => $booking->booking_code,
+            'total_price'  => $booking->total_price,
+        ]);
     }
 }
