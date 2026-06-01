@@ -44,28 +44,20 @@ class MemoforiaDummyDataSeeder extends Seeder
     {
         $branches = [
             [
-                'name' => 'MemForia Studio Jakarta',
-                'address' => 'Jl. Jenderal Sudirman Kav. 52-53, SCBD, Jakarta Selatan 12190',
-                'phone' => '021-555-0101',
-                'maps_link' => 'https://maps.google.com/?q=SCBD+Jakarta',
-                'operating_hours' => 'Sen–Min: 10:00 – 22:00',
+                'name' => 'Kalaswara',
+                'address' => 'Jl. Babakan Jati No.44, Gumuruh',
+                'city' => 'Bandung',
+                'province' => 'Jawa Barat',
+                'postal_code' => '40275',
+                'phone' => '(022) XXXX-XXXX',  // Nomor Kalaswara Coffee Shop
+                'email' => 'kalaswara@email.com',  // Email Kalaswara Coffee Shop
+                'whatsapp_number' => '+62812-XXXX-XXXX',  // WhatsApp untuk booking
+                'maps_link' => 'https://maps.app.goo.gl/tNcMd668UzGufKCy6',
+                'latitude' => -6.9328405,
+                'longitude' => 107.6347885,
+                'operating_hours' => 'Senin - Minggu, 10:00 - 22:00 WIB',
                 'image' => 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&w=800&q=80',
-            ],
-            [
-                'name' => 'MemForia Studio Bandung',
-                'address' => 'Jl. Braga No. 99, Sumur Bandung, Kota Bandung 40111',
-                'phone' => '022-555-0202',
-                'maps_link' => 'https://maps.google.com/?q=Braga+Bandung',
-                'operating_hours' => 'Sen–Sab: 10:00 – 21:00 | Min: 11:00 – 20:00',
-                'image' => 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=800&q=80',
-            ],
-            [
-                'name' => 'MemForia Studio Surabaya',
-                'address' => 'Jl. Embong Malang No. 25, Genteng, Surabaya 60261',
-                'phone' => '031-555-0303',
-                'maps_link' => 'https://maps.google.com/?q=Surabaya+City',
-                'operating_hours' => 'Sen–Min: 09:00 – 21:00',
-                'image' => 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
+                'description' => 'Kalaswara adalah coffee shop dan creative space yang menjadi partner MemoForia. Pengunjung dapat menikmati pengalaman photobox premium MemoForia di lokasi ini sambil merasakan suasana nyaman dari Kalaswara. Hubungi kami untuk booking dan informasi paket yang tersedia.',
             ],
         ];
 
@@ -78,11 +70,8 @@ class MemoforiaDummyDataSeeder extends Seeder
             $booths = [
                 ['name' => 'Booth Vintage Gold', 'status' => 'active'],
                 ['name' => 'Booth Neon Dreams', 'status' => 'active'],
+                ['name' => 'Booth Editorial White', 'status' => 'active'],
             ];
-
-            if (str_contains($data['name'], 'Jakarta')) {
-                $booths[] = ['name' => 'Booth Editorial White', 'status' => 'active'];
-            }
 
             foreach ($booths as $booth) {
                 Booth::updateOrCreate(

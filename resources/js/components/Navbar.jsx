@@ -33,7 +33,7 @@ export default function Navbar() {
     const navLinks = [
         { name: 'Home', href: '/' },
         { name: 'Book Studio', href: '/booking-session' },
-        { name: 'Lacak Booking', href: '/track-booking' },
+        { name: 'Track Booking', href: '/track-booking' },
         { name: 'Rentals', href: '/rentals' },
         { name: 'Pricelist', href: '/pricelist' },
         { name: 'Branches', href: '/branches' },
