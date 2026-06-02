@@ -478,15 +478,45 @@ export default function Booking({ initialDate = null }) {
                                 
                                 <div>
                                     <h4 className="font-serif text-md text-charcoal mb-4">A. Pilih Layout Frame Cetak Foto:</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                                         {templatesList.map(template => (
-                                            <button key={template.id} onClick={() => updateForm('selected_template_id', template.id)}
-                                                className={`p-5 rounded-2xl border-2 text-left transition-all bg-white relative overflow-hidden ${form.selected_template_id == template.id ? 'border-primary bg-primary-50/30' : 'border-beige hover:border-primary-200'}`}>
-                                                <h5 className="font-semibold text-charcoal text-sm">{template.name}</h5>
-                                                <p className="text-xs text-warm-grey mt-1">Ukuran cetak: {template.size} ({template.layout_type})</p>
-                                                <p className="text-xs text-slate font-light mt-1">Gaya Frame: {template.frame_type}</p>
+                                            <button
+                                                key={template.id}
+                                                onClick={() => updateForm('selected_template_id', template.id)}
+                                                className={`rounded-2xl border-2 text-left transition-all bg-white relative overflow-hidden flex flex-col ${
+                                                    form.selected_template_id == template.id
+                                                        ? 'border-primary shadow-[0_0_0_3px_rgba(var(--color-primary-rgb),0.15)]'
+                                                        : 'border-beige hover:border-primary-200'
+                                                }`}
+                                            >
+                                                {/* Preview Image */}
+                                                {template.preview_image ? (
+                                                    <div className="w-full bg-neutral-100 flex items-center justify-center overflow-hidden">
+                                                        <img
+                                                            src={template.preview_image}
+                                                            alt={`Preview ${template.name}`}
+                                                            className="w-full h-auto object-contain max-h-64"
+                                                            loading="lazy"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-full bg-beige/30 flex items-center justify-center" style={{ minHeight: '8rem' }}>
+                                                        <span className="text-warm-grey text-xs">Preview tidak tersedia</span>
+                                                    </div>
+                                                )}
+
+                                                {/* Info */}
+                                                <div className="p-3">
+                                                    <h5 className="font-semibold text-charcoal text-xs leading-tight">{template.name}</h5>
+                                                    <p className="text-[10px] text-warm-grey mt-0.5">{template.size} · {template.layout_type}</p>
+                                                    <p className="text-[10px] text-slate font-light">{template.frame_type}</p>
+                                                </div>
+
+                                                {/* Selected badge */}
                                                 {form.selected_template_id == template.id && (
-                                                    <span className="absolute bottom-2 right-2 bg-primary text-white p-1 rounded-full"><Check size={12} /></span>
+                                                    <span className="absolute top-2 right-2 bg-primary text-white p-1 rounded-full shadow">
+                                                        <Check size={10} />
+                                                    </span>
                                                 )}
                                             </button>
                                         ))}
@@ -614,9 +644,18 @@ export default function Booking({ initialDate = null }) {
                                         <span className="text-slate font-light">Paket Layanan</span>
                                         <span className="font-semibold text-charcoal">{selectedPackage?.name} ({selectedVariant?.name})</span>
                                     </div>
-                                    <div className="flex justify-between border-b border-primary-100/50 pb-2.5 text-sm">
-                                        <span className="text-slate font-light">Frame Layout</span>
-                                        <span className="font-semibold text-charcoal">{selectedTemplate?.name} ({selectedTemplate?.size})</span>
+                                    <div className="flex justify-between border-b border-primary-100/50 pb-2.5 text-sm gap-3">
+                                        <span className="text-slate font-light shrink-0">Frame Layout</span>
+                                        <div className="flex items-center gap-2 justify-end">
+                                            {selectedTemplate?.preview_image && (
+                                                <img
+                                                    src={selectedTemplate.preview_image}
+                                                    alt={selectedTemplate.name}
+                                                    className="h-12 w-auto object-contain rounded border border-beige"
+                                                />
+                                            )}
+                                            <span className="font-semibold text-charcoal text-right">{selectedTemplate?.name} ({selectedTemplate?.size})</span>
+                                        </div>
                                     </div>
 
                                     {/* Addons summary */}

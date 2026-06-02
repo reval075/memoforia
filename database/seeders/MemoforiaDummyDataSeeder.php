@@ -220,18 +220,54 @@ class MemoforiaDummyDataSeeder extends Seeder
     protected function seedPhotoTemplates(): void
     {
         $templates = [
-            ['name' => 'Classic 2x6 Strip', 'size' => '2x6', 'frame_type' => 'Classic', 'layout_type' => '3-Grid Vertical'],
-            ['name' => 'Modern 4R Grid', 'size' => '4R', 'frame_type' => 'Minimalist', 'layout_type' => '4-Grid'],
-            ['name' => 'Elegant Single 4R', 'size' => '4R', 'frame_type' => 'Vintage', 'layout_type' => 'Single Portrait'],
-            ['name' => 'Wedding Floral Frame', 'size' => '4R', 'frame_type' => 'Floral', 'layout_type' => '2-Grid Horizontal'],
-            ['name' => 'Corporate Clean Strip', 'size' => '2x6', 'frame_type' => 'Corporate', 'layout_type' => 'Logo Header + 3 Photo'],
-            ['name' => 'Polaroid Style', 'size' => '3.5x4.25', 'frame_type' => 'Polaroid', 'layout_type' => 'Single with Caption'],
+            [
+                'name'          => 'Classic 2x6 Strip',
+                'size'          => '2x6',
+                'frame_type'    => 'Classic',
+                'layout_type'   => '4-Grid Vertical Strip',
+                'preview_image' => '/images/templates/template-01.png',
+            ],
+            [
+                'name'          => 'Modern 4R Grid',
+                'size'          => '4R',
+                'frame_type'    => 'Minimalist',
+                'layout_type'   => '4-Grid Vertical Strip',
+                'preview_image' => '/images/templates/template-02.png',
+            ],
+            [
+                'name'          => 'Elegant Single 4R',
+                'size'          => '4R',
+                'frame_type'    => 'Vintage',
+                'layout_type'   => '4-Grid Vertical Strip',
+                'preview_image' => '/images/templates/template-04.png',
+            ],
+            [
+                'name'          => 'Wedding Floral Frame',
+                'size'          => '4R',
+                'frame_type'    => 'Floral',
+                'layout_type'   => '2-Row Landscape Strip',
+                'preview_image' => '/images/templates/template-05.jpg',
+            ],
+            [
+                'name'          => 'Corporate Clean Strip',
+                'size'          => '2x6',
+                'frame_type'    => 'Corporate',
+                'layout_type'   => '4-Grid Vertical Strip',
+                'preview_image' => '/images/templates/template-03.jpg',
+            ],
+            [
+                'name'          => 'Polaroid Style',
+                'size'          => '3.5x4.25',
+                'frame_type'    => 'Polaroid',
+                'layout_type'   => 'Single with Caption',
+                'preview_image' => null,
+            ],
         ];
 
         foreach ($templates as $tpl) {
             PhotoTemplate::updateOrCreate(
                 ['name' => $tpl['name']],
-                array_merge($tpl, ['preview_image' => null, 'is_active' => true])
+                array_merge($tpl, ['is_active' => true])
             );
         }
     }
