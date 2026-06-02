@@ -43,10 +43,30 @@ export default function GuestLayout({ children }) {
                         <div>
                             <h4 className="font-sans text-sm uppercase tracking-widest text-accent mb-6">Contact</h4>
                             <ul className="space-y-3">
-                                <li className="flex items-center space-x-3 text-white/60 text-sm"><Camera size={16}/><span>@memoforia</span></li>
-                                <li className="flex items-center space-x-3 text-white/60 text-sm"><Phone size={16}/><span>+62 812-3456-7890</span></li>
-                                <li className="flex items-center space-x-3 text-white/60 text-sm"><Mail size={16}/><span>memoforia@gmail.com</span></li>
-                                <li className="flex items-center space-x-3 text-white/60 text-sm"><MapPin size={16}/><span>Jakarta, Indonesia</span></li>
+                                <li className="flex items-center space-x-3 text-white/60 text-sm">
+                                    <Phone size={16}/>
+                                    <a href="https://wa.me/6285189920832" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                                        +62 851-8992-0832
+                                    </a>
+                                </li>
+                                <li className="flex items-center space-x-3 text-white/60 text-sm">
+                                    <Camera size={16}/>
+                                    <a href="https://www.instagram.com/memo.foria?igsh=YnJrejE5OThxejQ4" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                                        @memo.foria
+                                    </a>
+                                </li>
+                                <li className="flex items-center space-x-3 text-white/60 text-sm">
+                                    <Camera size={16}/>
+                                    <a href="https://www.tiktok.com/@memo.foria?_r=1&_t=ZS-96reWurSg45" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                                        @memo.foria
+                                    </a>
+                                </li>
+                                <li className="flex items-center space-x-3 text-white/60 text-sm">
+                                    <Mail size={16}/>
+                                    <a href="mailto:memoforia@gmail.com" className="hover:text-white transition-colors">
+                                        memoforia@gmail.com
+                                    </a>
+                                </li>
                             </ul>
                         </div>
                     </div>
