@@ -1,6 +1,7 @@
 import Navbar from '@/Components/Navbar';
 import { motion } from 'framer-motion';
-import { Camera, Phone, Mail, MapPin } from 'lucide-react';
+import { Mail, MapPin } from 'lucide-react';
+import { FaWhatsapp, FaInstagram, FaTiktok } from 'react-icons/fa';
 
 export default function GuestLayout({ children }) {
     return (
@@ -44,20 +45,20 @@ export default function GuestLayout({ children }) {
                             <h4 className="font-sans text-sm uppercase tracking-widest text-accent mb-6">Contact</h4>
                             <ul className="space-y-3">
                                 <li className="flex items-center space-x-3 text-white/60 text-sm">
-                                    <Phone size={16}/>
+                                    <FaWhatsapp size={16}/>
                                     <a href="https://wa.me/6285189920832" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
                                         +62 851-8992-0832
                                     </a>
                                 </li>
                                 <li className="flex items-center space-x-3 text-white/60 text-sm">
-                                    <Camera size={16}/>
-                                    <a href="https://www.instagram.com/memo.foria?igsh=YnJrejE5OThxejQ4" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                                    <FaInstagram size={16}/>
+                                    <a href="https://www.instagram.com/memo.foria" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
                                         @memo.foria
                                     </a>
                                 </li>
                                 <li className="flex items-center space-x-3 text-white/60 text-sm">
-                                    <Camera size={16}/>
-                                    <a href="https://www.tiktok.com/@memo.foria?_r=1&_t=ZS-96reWurSg45" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                                    <FaTiktok size={16}/>
+                                    <a href="https://www.tiktok.com/@memo.foria" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
                                         @memo.foria
                                     </a>
                                 </li>
