@@ -25,16 +25,39 @@ export default function Dashboard() {
     const [blockForm, setBlockForm] = useState({ date: '', reason: '' });
 
     // Configuration CRUD States
-    const [packageForm, setPackageForm] = useState({ id: null, name: '', category: 'soft_file', description: '', is_active: true });
+    const [packageForm, setPackageForm] = useState({
+        id: null,
+        name: '',
+        category: 'soft_file',
+        description: '',
+        is_active: true,
+        display_order: 0,
+        includes_softfile: false,
+        includes_prints: false,
+        includes_qr_code: false,
+        includes_gif: false,
+        includes_custom_template: false,
+        includes_supporting_crew: false,
+        includes_tiket_antrian: false,
+    });
     const [isEditingPackage, setIsEditingPackage] = useState(false);
 
     const [variantForm, setVariantForm] = useState({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', is_unlimited: false });
     const [isEditingVariant, setIsEditingVariant] = useState(false);
 
-    const [addonForm, setAddonForm] = useState({ id: null, name: '', price: '', description: '', is_active: true });
+    const [addonForm, setAddonForm] = useState({ id: null, name: '', price: '', description: '', is_active: true, display_order: 0 });
     const [isEditingAddon, setIsEditingAddon] = useState(false);
 
-    const [templateForm, setTemplateForm] = useState({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', is_active: true });
+    const [templateForm, setTemplateForm] = useState({
+        id: null,
+        name: '',
+        size: '4R',
+        frame_type: '',
+        layout_type: '',
+        description: '',
+        is_active: true,
+        display_order: 0,
+    });
     const [isEditingTemplate, setIsEditingTemplate] = useState(false);
 
     // Filters (separate per tab — shared filter caused empty rental list when booking filter didn't match)
@@ -270,14 +293,42 @@ export default function Dashboard() {
 
         request.then(res => {
             showMsg(res.data.message);
-            setPackageForm({ id: null, name: '', category: 'soft_file', description: '', is_active: true });
+            setPackageForm({
+                id: null,
+                name: '',
+                category: 'soft_file',
+                description: '',
+                is_active: true,
+                display_order: 0,
+                includes_softfile: false,
+                includes_prints: false,
+                includes_qr_code: false,
+                includes_gif: false,
+                includes_custom_template: false,
+                includes_supporting_crew: false,
+                includes_tiket_antrian: false,
+            });
             setIsEditingPackage(false);
             loadPackages();
         }).catch(err => showMsg(err.response?.data?.message || 'Gagal menyimpan paket.', 'error'));
     };
 
     const handleEditPackage = (pkg) => {
-        setPackageForm({ id: pkg.id, name: pkg.name, category: pkg.category, description: pkg.description || '', is_active: !!pkg.is_active });
+        setPackageForm({
+            id: pkg.id,
+            name: pkg.name,
+            category: pkg.category,
+            description: pkg.description || '',
+            is_active: !!pkg.is_active,
+            display_order: pkg.display_order ?? 0,
+            includes_softfile: !!pkg.includes_softfile,
+            includes_prints: !!pkg.includes_prints,
+            includes_qr_code: !!pkg.includes_qr_code,
+            includes_gif: !!pkg.includes_gif,
+            includes_custom_template: !!pkg.includes_custom_template,
+            includes_supporting_crew: !!pkg.includes_supporting_crew,
+            includes_tiket_antrian: !!pkg.includes_tiket_antrian,
+        });
         setIsEditingPackage(true);
     };
 
@@ -341,14 +392,21 @@ export default function Dashboard() {
 
         request.then(res => {
             showMsg(res.data.message);
-            setAddonForm({ id: null, name: '', price: '', description: '', is_active: true });
+            setAddonForm({ id: null, name: '', price: '', description: '', is_active: true, display_order: 0 });
             setIsEditingAddon(false);
             loadAddons();
         }).catch(err => showMsg(err.response?.data?.message || 'Gagal menyimpan addon.', 'error'));
     };
 
     const handleEditAddon = (add) => {
-        setAddonForm({ id: add.id, name: add.name, price: add.price, description: add.description || '', is_active: !!add.is_active });
+        setAddonForm({
+            id: add.id,
+            name: add.name,
+            price: add.price,
+            description: add.description || '',
+            is_active: !!add.is_active,
+            display_order: add.display_order ?? 0,
+        });
         setIsEditingAddon(true);
     };
 
@@ -366,20 +424,50 @@ export default function Dashboard() {
     // Templates CRUD
     const handleTemplateSubmit = (e) => {
         e.preventDefault();
+        const formData = new FormData();
+
+        Object.entries(templateForm).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+                formData.append(key, value);
+            }
+        });
+
         const request = isEditingTemplate
-            ? axios.put(`/admin/api/photo-templates/${templateForm.id}`, templateForm)
-            : axios.post('/admin/api/photo-templates', templateForm);
+            ? axios.put(`/admin/api/photo-templates/${templateForm.id}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            })
+            : axios.post('/admin/api/photo-templates', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
 
         request.then(res => {
             showMsg(res.data.message);
-            setTemplateForm({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', is_active: true });
+            setTemplateForm({
+                id: null,
+                name: '',
+                size: '4R',
+                frame_type: '',
+                layout_type: '',
+                description: '',
+                is_active: true,
+                display_order: 0,
+            });
             setIsEditingTemplate(false);
             loadTemplates();
         }).catch(err => showMsg(err.response?.data?.message || 'Gagal menyimpan template.', 'error'));
     };
 
     const handleEditTemplate = (t) => {
-        setTemplateForm({ id: t.id, name: t.name, size: t.size, frame_type: t.frame_type || '', layout_type: t.layout_type || '', is_active: !!t.is_active });
+        setTemplateForm({
+            id: t.id,
+            name: t.name,
+            size: t.size,
+            frame_type: t.frame_type || '',
+            layout_type: t.layout_type || '',
+            description: t.description || '',
+            is_active: !!t.is_active,
+            display_order: t.display_order ?? 0,
+        });
         setIsEditingTemplate(true);
     };
 
@@ -881,7 +969,7 @@ export default function Dashboard() {
                                 <div className="space-y-8">
                                     <form onSubmit={handlePackageSubmit} className="space-y-4 bg-off-white/50 p-6 rounded-2xl border border-beige">
                                         <h3 className="font-serif text-md text-charcoal mb-2">{isEditingPackage ? 'Edit Paket Jasa' : 'Tambah Paket Jasa Baru'}</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div>
                                                 <label className="block text-xs font-semibold text-charcoal mb-1">Package Name</label>
                                                 <input type="text" required placeholder="e.g. Premium Unlimited" value={packageForm.name} onChange={e => setPackageForm({ ...packageForm, name: e.target.value })}
@@ -896,6 +984,11 @@ export default function Dashboard() {
                                                     <option value="limited_print">Limited Prints</option>
                                                 </select>
                                             </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-charcoal mb-1">Display Order</label>
+                                                <input type="number" min="0" value={packageForm.display_order} onChange={e => setPackageForm({ ...packageForm, display_order: Number(e.target.value) })}
+                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
+                                            </div>
                                             <div className="flex items-center space-x-2 pt-6">
                                                 <input type="checkbox" id="pkg_active" checked={packageForm.is_active} onChange={e => setPackageForm({ ...packageForm, is_active: e.target.checked })} />
                                                 <label htmlFor="pkg_active" className="text-xs font-semibold text-charcoal">Package Active</label>
@@ -905,6 +998,19 @@ export default function Dashboard() {
                                             <label className="block text-xs font-semibold text-charcoal mb-1">Description</label>
                                             <textarea required placeholder="Detailed marketing/service text..." value={packageForm.description} onChange={e => setPackageForm({ ...packageForm, description: e.target.value })}
                                                 className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm resize-none" rows="2" />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_softfile} onChange={e => setPackageForm({ ...packageForm, includes_softfile: e.target.checked })} /> Softfile</label>
+                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_prints} onChange={e => setPackageForm({ ...packageForm, includes_prints: e.target.checked })} /> Prints</label>
+                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_qr_code} onChange={e => setPackageForm({ ...packageForm, includes_qr_code: e.target.checked })} /> QR Code</label>
+                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_gif} onChange={e => setPackageForm({ ...packageForm, includes_gif: e.target.checked })} /> GIF</label>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_custom_template} onChange={e => setPackageForm({ ...packageForm, includes_custom_template: e.target.checked })} /> Custom Template</label>
+                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_supporting_crew} onChange={e => setPackageForm({ ...packageForm, includes_supporting_crew: e.target.checked })} /> Supporting Crew</label>
+                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_tiket_antrian} onChange={e => setPackageForm({ ...packageForm, includes_tiket_antrian: e.target.checked })} /> Tiket Antrian</label>
+                                            </div>
                                         </div>
                                         <div className="flex justify-end space-x-2 pt-2">
                                             {isEditingPackage && (
@@ -926,9 +1032,19 @@ export default function Dashboard() {
                                                         <span className="text-xs text-warm-grey capitalize">({pkg.category?.replace('_', ' ')})</span>
                                                     </div>
                                                     <p className="text-xs text-slate font-light leading-relaxed mb-4">{pkg.description}</p>
-                                                    <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-semibold ${pkg.is_active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                                        {pkg.is_active ? 'Active' : 'Inactive'}
-                                                    </span>
+                                                <div className="flex flex-wrap gap-2 mb-4 text-[10px] uppercase">
+                                                    <span className="px-2 py-1 rounded bg-beige text-charcoal">Order: {pkg.display_order ?? 0}</span>
+                                                    {pkg.includes_softfile && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Softfile</span>}
+                                                    {pkg.includes_prints && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Prints</span>}
+                                                    {pkg.includes_qr_code && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">QR Code</span>}
+                                                    {pkg.includes_gif && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">GIF</span>}
+                                                    {pkg.includes_custom_template && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Custom Template</span>}
+                                                    {pkg.includes_supporting_crew && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Supporting Crew</span>}
+                                                    {pkg.includes_tiket_antrian && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Tiket Antrian</span>}
+                                                </div>
+                                                <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-semibold ${pkg.is_active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                                    {pkg.is_active ? 'Active' : 'Inactive'}
+                                                </span>
                                                 </div>
                                                 <div className="flex justify-end space-x-2 pt-4 border-t border-beige mt-4">
                                                     <button onClick={() => handleEditPackage(pkg)} className="p-2 text-primary hover:bg-primary-50 rounded-full"><Edit2 size={14} /></button>
@@ -1034,7 +1150,7 @@ export default function Dashboard() {
                                 <div className="space-y-8">
                                     <form onSubmit={handleAddonSubmit} className="space-y-4 bg-off-white/50 p-6 rounded-2xl border border-beige">
                                         <h3 className="font-serif text-md text-charcoal mb-2">{isEditingAddon ? 'Edit Addon' : 'Tambah Addon Baru'}</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div>
                                                 <label className="block text-xs font-semibold text-charcoal mb-1">Addon Name</label>
                                                 <input type="text" required placeholder="e.g. Custom Backdrop" value={addonForm.name} onChange={e => setAddonForm({ ...addonForm, name: e.target.value })}
@@ -1043,6 +1159,11 @@ export default function Dashboard() {
                                             <div>
                                                 <label className="block text-xs font-semibold text-charcoal mb-1">Price (IDR)</label>
                                                 <input type="number" required placeholder="e.g. 500000" value={addonForm.price} onChange={e => setAddonForm({ ...addonForm, price: e.target.value })}
+                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-charcoal mb-1">Display Order</label>
+                                                <input type="number" min="0" value={addonForm.display_order} onChange={e => setAddonForm({ ...addonForm, display_order: Number(e.target.value) })}
                                                     className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
                                             </div>
                                             <div className="flex items-center space-x-2 pt-6">
@@ -1094,7 +1215,7 @@ export default function Dashboard() {
                                 <div className="space-y-8">
                                     <form onSubmit={handleTemplateSubmit} className="space-y-4 bg-off-white/50 p-6 rounded-2xl border border-beige">
                                         <h3 className="font-serif text-md text-charcoal mb-2">{isEditingTemplate ? 'Edit Template Frame' : 'Tambah Template Frame Baru'}</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div>
                                                 <label className="block text-xs font-semibold text-charcoal mb-1">Template Name</label>
                                                 <input type="text" required placeholder="e.g. Classic Strip" value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })}
@@ -1103,6 +1224,11 @@ export default function Dashboard() {
                                             <div>
                                                 <label className="block text-xs font-semibold text-charcoal mb-1">Size (e.g. 4R, 2x6 strip)</label>
                                                 <input type="text" required placeholder="e.g. 4R" value={templateForm.size} onChange={e => setTemplateForm({ ...templateForm, size: e.target.value })}
+                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-charcoal mb-1">Display Order</label>
+                                                <input type="number" min="0" value={templateForm.display_order} onChange={e => setTemplateForm({ ...templateForm, display_order: Number(e.target.value) })}
                                                     className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
                                             </div>
                                             <div className="flex items-center space-x-2 pt-6">
@@ -1121,6 +1247,19 @@ export default function Dashboard() {
                                                 <input type="text" placeholder="e.g. 3-Grid vertical, 4-Grid square" value={templateForm.layout_type} onChange={e => setTemplateForm({ ...templateForm, layout_type: e.target.value })}
                                                     className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
                                             </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-charcoal mb-1">Description</label>
+                                            <textarea placeholder="Optional description for internal frame catalog" value={templateForm.description} onChange={e => setTemplateForm({ ...templateForm, description: e.target.value })}
+                                                className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm resize-none" rows="2" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-charcoal mb-1">Frame Image (JPG, PNG, WEBP)</label>
+                                            <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={e => {
+                                                const file = e.target.files?.[0];
+                                                setTemplateForm({ ...templateForm, frame_image: file });
+                                            }}
+                                                className="w-full text-xs text-slate" />
                                         </div>
                                         <div className="flex justify-end space-x-2 pt-2">
                                             {isEditingTemplate && (

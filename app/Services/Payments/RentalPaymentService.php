@@ -96,7 +96,7 @@ class RentalPaymentService
         return DB::transaction(function () use ($rental, $validated) {
             $rental = $this->lockAndSyncExpire($rental);
 
-            if ($blocked = $this->blockedPaymentResponse($rental, ['waiting_dp'])) {
+            if ($blocked = $this->blockedPaymentResponse($rental, ['waiting_dp', 'confirmed'])) {
                 return $blocked;
             }
 

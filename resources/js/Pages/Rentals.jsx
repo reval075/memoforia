@@ -22,20 +22,25 @@ export default function Rentals() {
     });
 
     useEffect(() => {
-        axios.get('/api/rental-equipments')
+        const params = {};
+        if (form.start_date) params.start_date = form.start_date;
+        if (form.end_date) params.end_date = form.end_date;
+        const query = new URLSearchParams(params).toString();
+        axios.get(`/api/rental-equipments${query ? `?${query}` : ''}`)
             .then(res => setEquipments(res.data.data))
             .catch(() => setError('Gagal memuat data peralatan.'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [form.start_date, form.end_date]);
 
     const addToCart = (equipment) => {
         const existing = cart.find(c => c.equipment_id === equipment.id);
+        const avail = typeof equipment.available_stock !== 'undefined' ? equipment.available_stock : equipment.stock;
         if (existing) {
-            if (existing.qty < equipment.stock) {
+            if (existing.qty < avail) {
                 setCart(cart.map(c => c.equipment_id === equipment.id ? { ...c, qty: c.qty + 1 } : c));
             }
         } else {
-            setCart([...cart, { equipment_id: equipment.id, qty: 1, equipment }]);
+            if (avail > 0) setCart([...cart, { equipment_id: equipment.id, qty: 1, equipment }]);
         }
         setShowCart(true);
     };
@@ -45,7 +50,8 @@ export default function Rentals() {
             if (c.equipment_id === equipmentId) {
                 const newQty = c.qty + delta;
                 if (newQty <= 0) return null;
-                if (newQty > c.equipment.stock) return c;
+                const avail = typeof c.equipment.available_stock !== 'undefined' ? c.equipment.available_stock : c.equipment.stock;
+                if (newQty > avail) return c;
                 return { ...c, qty: newQty };
             }
             return c;
@@ -142,9 +148,11 @@ export default function Rentals() {
                                         <p className="text-xs text-warm-grey">per hari</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-xs text-warm-grey mb-2">Stok: {eq.stock}</p>
-                                        <button onClick={() => addToCart(eq)} disabled={eq.stock <= 0}
-                                            className={`px-5 py-2 rounded-full text-sm transition-all ${eq.stock > 0 ? 'bg-primary text-white hover:bg-primary-dark' : 'bg-beige text-warm-grey cursor-not-allowed'}`}>
+                                        <p className="text-xs text-warm-grey mb-2">Stok: {typeof eq.available_stock !== 'undefined' ? eq.available_stock : eq.stock}{
+                                            typeof eq.available_stock !== 'undefined' ? <span className="text-xxs text-warm-grey block">(total {eq.stock})</span> : null
+                                        }</p>
+                                        <button onClick={() => addToCart(eq)} disabled={(typeof eq.available_stock !== 'undefined' ? eq.available_stock : eq.stock) <= 0}
+                                            className={`px-5 py-2 rounded-full text-sm transition-all ${((typeof eq.available_stock !== 'undefined' ? eq.available_stock : eq.stock) > 0) ? 'bg-primary text-white hover:bg-primary-dark' : 'bg-beige text-warm-grey cursor-not-allowed'}`}>
                                             <Plus size={14} className="inline mr-1" /> Sewa
                                         </button>
                                     </div>

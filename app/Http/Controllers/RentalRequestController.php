@@ -51,8 +51,27 @@ class RentalRequestController extends Controller
             foreach ($validated['items'] as $item) {
                 $equipment = RentalEquipment::findOrFail($item['equipment_id']);
 
-                if ($equipment->stock < $item['qty']) {
-                    throw new \Exception("Stock untuk {$equipment->name} tidak mencukupi");
+                // Determine requested range and blocking window (end_date + 2 days)
+                $requestedStart = $startDate->toDateString();
+                $requestedEndPlus2 = $endDate->copy()->addDays(2)->toDateString();
+
+                // Sum quantities already reserved on overlapping rentals
+                $reservedQty = \DB::table('rental_items')
+                    ->join('rental_requests', 'rental_items.rental_request_id', '=', 'rental_requests.id')
+                    ->where('rental_items.equipment_id', $equipment->id)
+                    ->whereIn('rental_requests.status', ['waiting_dp', 'confirmed'])
+                    ->where(function ($q) use ($requestedStart, $requestedEndPlus2) {
+                        // overlap where existing.start_date <= requestedEndPlus2 AND existing.end_date +2 >= requestedStart
+                        $q->whereRaw("rental_requests.start_date <= ?", [$requestedEndPlus2])
+                          ->whereRaw("DATE_ADD(rental_requests.end_date, INTERVAL 2 DAY) >= ?", [$requestedStart]);
+                    })
+                    ->selectRaw('COALESCE(SUM(rental_items.qty),0) as sum')
+                    ->value('sum');
+
+                $available = max(0, $equipment->stock - (int) $reservedQty);
+
+                if ($available < $item['qty']) {
+                    throw new \Exception("Stok untuk {$equipment->name} tidak mencukupi pada rentang tanggal yang dipilih. Tersedia: {$available}");
                 }
 
                 $itemTotal  = $equipment->price_per_day * $item['qty'] * $days;
@@ -252,6 +271,7 @@ class RentalRequestController extends Controller
 
                 $rental->update([
                     'status' => 'waiting_dp',
+                    'payment_status' => 'unpaid',
                     'approved_by' => \Illuminate\Support\Facades\Auth::id(),
                     'approved_at' => now(),
                     'dp_expired_at' => $dpExpiredAt,

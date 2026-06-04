@@ -4,6 +4,7 @@ use Inertia\Inertia;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
+use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
     return Inertia::render('Home');
@@ -121,7 +122,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
 
     // Admin Addons CRUD
     Route::get('/admin/api/addons', function () {
-        return response()->json(['data' => \App\Models\Addon::latest()->get()]);
+        return response()->json(['data' => \App\Models\Addon::orderBy('display_order')->latest()->get()]);
     });
     Route::post('/admin/api/addons', function (Request $request) {
         $validated = $request->validate([
@@ -129,6 +130,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
             'price' => 'required|numeric|min:0',
             'description' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'display_order' => 'nullable|integer|min:0',
         ]);
         $addon = \App\Models\Addon::create($validated);
         return response()->json(['message' => 'Addon berhasil ditambahkan.', 'data' => $addon], 201);
@@ -140,6 +142,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
             'price' => 'required|numeric|min:0',
             'description' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'display_order' => 'nullable|integer|min:0',
         ]);
         $addon->update($validated);
         return response()->json(['message' => 'Addon berhasil diperbarui.', 'data' => $addon]);
@@ -152,7 +155,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
 
     // Admin Photo Templates CRUD
     Route::get('/admin/api/photo-templates', function () {
-        return response()->json(['data' => \App\Models\PhotoTemplate::latest()->get()]);
+        return response()->json(['data' => \App\Models\PhotoTemplate::orderBy('display_order')->latest()->get()]);
     });
     Route::post('/admin/api/photo-templates', function (Request $request) {
         $validated = $request->validate([
@@ -160,8 +163,16 @@ Route::middleware(['auth', 'admin'])->group(function () {
             'size' => 'required|string|max:50',
             'frame_type' => 'nullable|string|max:255',
             'layout_type' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'display_order' => 'nullable|integer|min:0',
+            'frame_image' => 'nullable|file|mimes:jpg,jpeg,png,webp|max:10240',
         ]);
+
+        if ($request->hasFile('frame_image')) {
+            $validated['frame_image'] = $request->file('frame_image')->store('frame_images', 'public');
+        }
+
         $template = \App\Models\PhotoTemplate::create($validated);
         return response()->json(['message' => 'Template berhasil ditambahkan.', 'data' => $template], 201);
     });
@@ -172,8 +183,19 @@ Route::middleware(['auth', 'admin'])->group(function () {
             'size' => 'required|string|max:50',
             'frame_type' => 'nullable|string|max:255',
             'layout_type' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'display_order' => 'nullable|integer|min:0',
+            'frame_image' => 'nullable|file|mimes:jpg,jpeg,png,webp|max:10240',
         ]);
+
+        if ($request->hasFile('frame_image')) {
+            if ($template->frame_image) {
+                Storage::disk('public')->delete($template->frame_image);
+            }
+            $validated['frame_image'] = $request->file('frame_image')->store('frame_images', 'public');
+        }
+
         $template->update($validated);
         return response()->json(['message' => 'Template berhasil diperbarui.', 'data' => $template]);
     });

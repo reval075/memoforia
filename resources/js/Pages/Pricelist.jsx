@@ -4,6 +4,9 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Check, Sparkles, Package } from 'lucide-react';
 
 const categoryLabels = {
+    hemat: 'Package Hemat',
+    basic: 'Package Basic',
+    premium: 'Package Premium',
     soft_file: 'Soft File Only',
     unlimited_print: 'Unlimited Print',
     limited_print: 'Limited Print',
@@ -80,7 +83,16 @@ export default function Pricelist({ packages = [], boothPackages = [], addons = 
                                         className="bg-white rounded-3xl border border-primary-50 shadow-lg shadow-primary/5 p-6 md:p-8 hover:border-primary/30 transition-colors"
                                     >
                                         <h3 className="text-xl font-serif text-charcoal mb-2">{pkg.name}</h3>
-                                        <p className="text-sm text-slate font-light mb-6 leading-relaxed">{pkg.description}</p>
+                                        <p className="text-sm text-slate font-light mb-4 leading-relaxed">{pkg.description}</p>
+                                        <div className="flex flex-wrap gap-2 mb-4 text-[11px] uppercase">
+                                            {pkg.includes_softfile && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Softfile</span>}
+                                            {pkg.includes_prints && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Prints</span>}
+                                            {pkg.includes_qr_code && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">QR Code</span>}
+                                            {pkg.includes_gif && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">GIF</span>}
+                                            {pkg.includes_custom_template && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Custom Template</span>}
+                                            {pkg.includes_supporting_crew && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Supporting Crew</span>}
+                                            {pkg.includes_tiket_antrian && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Tiket Antrian</span>}
+                                        </div>
                                         <div className="space-y-0">
                                             {pkg.package_variants?.map((v) => (
                                                 <VariantRow key={v.id} variant={v} />
