@@ -32,8 +32,10 @@ class BookingController extends Controller
             'event_datetime' => 'required|date|after_or_equal:today',
             'service_package_id' => 'required|exists:service_packages,id',
             'package_variant_id' => 'required|exists:package_variants,id',
-            'selected_template_id' => 'required|exists:photo_templates,id',
+            'selected_template_id' => 'nullable|exists:photo_templates,id',
             'notes' => 'nullable|string',
+            'custom_frame' => 'nullable|file|mimes:png,jpg,jpeg|max:10240',
+            'use_custom_frame' => 'boolean',
             'addons' => 'nullable|array', // e.g. [['id' => 1, 'quantity' => 2]]
             'addons.*.id' => 'exists:addons,id',
             'addons.*.quantity' => 'integer|min:1',
@@ -93,13 +95,25 @@ class BookingController extends Controller
             }
         }
 
+        $customFrameData = [];
+        if ($request->hasFile('custom_frame')) {
+            $file = $request->file('custom_frame');
+            $path = $file->store('custom_frames', 'public');
+
+            $customFrameData = [
+                'custom_frame_path' => $path,
+                'custom_frame_original_name' => $file->getClientOriginalName(),
+                'custom_frame_uploaded_at' => now(),
+            ];
+        }
+
         // Generate booking code
         $datePart = $eventDatetime->format('Ymd');
         $randomPart = strtoupper(Str::random(5));
         $bookingCode = "MEMO-{$datePart}-{$randomPart}";
 
-        $booking = DB::transaction(function () use ($validated, $bookingCode, $eventDate, $eventDatetime, $variant, $totalPrice, $addonData) {
-            $booking = Booking::create([
+        $booking = DB::transaction(function () use ($validated, $bookingCode, $eventDate, $eventDatetime, $variant, $totalPrice, $addonData, $customFrameData) {
+            $booking = Booking::create(array_merge([
                 'booking_code' => $bookingCode,
                 'customer_name' => $validated['customer_name'],
                 'customer_email' => $validated['customer_email'],
@@ -110,12 +124,13 @@ class BookingController extends Controller
                 'event_datetime' => $eventDatetime,
                 'service_package_id' => $validated['service_package_id'],
                 'package_variant_id' => $validated['package_variant_id'],
-                'selected_template_id' => $validated['selected_template_id'],
+                'selected_template_id' => $validated['selected_template_id'] ?? null,
+                'use_custom_frame' => $validated['use_custom_frame'] ?? false,
                 'notes' => $validated['notes'] ?? null,
                 'status' => 'pending_approval',
                 'payment_status' => 'unpaid',
                 'total_price' => $totalPrice,
-            ]);
+            ], $customFrameData));
 
             if (!empty($addonData)) {
                 $booking->addons()->sync($addonData);

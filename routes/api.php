@@ -30,11 +30,11 @@ Route::post('/bookings/payment-proof', [BookingController::class, 'uploadProof']
 Route::get('/bookings/{bookingCode}/payment-tracking', [PaymentController::class, 'getBookingPaymentTracking']);
 
 Route::get('/addons', function () {
-    return response()->json(['data' => \App\Models\Addon::where('is_active', true)->get()]);
+    return response()->json(['data' => \App\Models\Addon::where('is_active', true)->orderBy('display_order')->get()]);
 });
 
 Route::get('/photo-templates', function () {
-    return response()->json(['data' => \App\Models\PhotoTemplate::where('is_active', true)->get()]);
+    return response()->json(['data' => \App\Models\PhotoTemplate::where('is_active', true)->orderBy('display_order')->get()]);
 });
 
 Route::get('/rental-equipments', [RentalEquipmentController::class, 'index']);

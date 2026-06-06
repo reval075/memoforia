@@ -12,7 +12,11 @@ class PackageController extends Controller
      */
     public function index()
     {
-        $packages = ServicePackage::with('packageVariants')->where('is_active', true)->get();
+        $packages = ServicePackage::with('packageVariants')
+            ->where('is_active', true)
+            ->orderBy('display_order')
+            ->orderBy('name')
+            ->get();
         return response()->json(['data' => $packages]);
     }
 
@@ -30,7 +34,10 @@ class PackageController extends Controller
      */
     public function adminIndex()
     {
-        $packages = ServicePackage::with('packageVariants')->latest()->get();
+        $packages = ServicePackage::with('packageVariants')
+            ->orderBy('display_order')
+            ->latest()
+            ->get();
         return response()->json(['data' => $packages]);
     }
 
@@ -44,6 +51,14 @@ class PackageController extends Controller
             'category' => 'required|string|max:255',
             'description' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'display_order' => 'nullable|integer|min:0',
+            'includes_softfile' => 'nullable|boolean',
+            'includes_prints' => 'nullable|boolean',
+            'includes_qr_code' => 'nullable|boolean',
+            'includes_gif' => 'nullable|boolean',
+            'includes_custom_template' => 'nullable|boolean',
+            'includes_supporting_crew' => 'nullable|boolean',
+            'includes_tiket_antrian' => 'nullable|boolean',
         ]);
 
         $package = ServicePackage::create($validated);
@@ -66,6 +81,14 @@ class PackageController extends Controller
             'category' => 'required|string|max:255',
             'description' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'display_order' => 'nullable|integer|min:0',
+            'includes_softfile' => 'nullable|boolean',
+            'includes_prints' => 'nullable|boolean',
+            'includes_qr_code' => 'nullable|boolean',
+            'includes_gif' => 'nullable|boolean',
+            'includes_custom_template' => 'nullable|boolean',
+            'includes_supporting_crew' => 'nullable|boolean',
+            'includes_tiket_antrian' => 'nullable|boolean',
         ]);
 
         $package->update($validated);

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class Booking extends Model
 {
@@ -21,6 +22,7 @@ class Booking extends Model
         'service_package_id',
         'package_variant_id',
         'selected_template_id',
+        'use_custom_frame',
         'notes',
         'status',
         'approved_by',
@@ -35,6 +37,9 @@ class Booking extends Model
         'branch_id',
         'availability_id',
         'completed_at',
+        'custom_frame_path',
+        'custom_frame_original_name',
+        'custom_frame_uploaded_at',
     ];
 
     protected $casts = [
@@ -45,6 +50,7 @@ class Booking extends Model
         'settlement_due_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'completed_at' => 'datetime',
+        'custom_frame_uploaded_at' => 'datetime',
     ];
 
     /**
@@ -249,7 +255,14 @@ class Booking extends Model
     {
         return $this->getRemainingAmount() <= 0;
     }
+    public function getCustomFrameUrlAttribute(): ?string
+    {
+        if (! $this->custom_frame_path) {
+            return null;
+        }
 
+        return Storage::disk('public')->url($this->custom_frame_path);
+    }
     /**
      * Get DP payment amount (verified only)
      */

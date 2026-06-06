@@ -76,10 +76,12 @@ export default function Booking({ initialDate = null }) {
         service_package_id: '',
         package_variant_id: '',
         selected_template_id: '',
+        use_custom_frame: false,
     });
 
     // Addons quantities mapping: { addon_id: quantity }
     const [selectedAddons, setSelectedAddons] = useState({});
+    const [customFrameFile, setCustomFrameFile] = useState(null);
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -138,6 +140,14 @@ export default function Booking({ initialDate = null }) {
     const selectedPackage = packages.find(p => p.id == form.service_package_id);
     const selectedVariant = selectedPackage?.package_variants?.find(v => v.id == form.package_variant_id);
     const selectedTemplate = templatesList.find(t => t.id == form.selected_template_id);
+
+    const getTemplateImageUrl = (template) => {
+        if (!template) return null;
+        if (template.frame_image_url) return template.frame_image_url;
+        if (template.frame_image) return `/storage/${template.frame_image}`;
+        if (template.preview_image) return `/storage/${template.preview_image}`;
+        return null;
+    };
 
     // Calculate dynamic total price on frontend
     const calculateTotalPrice = () => {
@@ -244,7 +254,12 @@ export default function Booking({ initialDate = null }) {
     const canNext = () => {
         if (step === 0) return form.event_date !== '';
         if (step === 1) return form.service_package_id !== '' && form.package_variant_id !== '';
-        if (step === 2) return form.selected_template_id !== '';
+        if (step === 2) {
+            if (form.use_custom_frame) {
+                return !!customFrameFile;
+            }
+            return true;
+        }
         if (step === 3) return form.customer_name && form.customer_email && form.customer_phone && form.event_name && form.event_location;
         return true;
     };
@@ -262,22 +277,32 @@ export default function Booking({ initialDate = null }) {
         // Combine date + time
         const eventDatetime = `${form.event_date} ${form.event_time}:00`;
 
-        const payload = {
-            customer_name: form.customer_name,
-            customer_email: form.customer_email,
-            customer_phone: form.customer_phone,
-            event_name: form.event_name,
-            event_location: form.event_location,
-            event_datetime: eventDatetime,
-            service_package_id: form.service_package_id,
-            package_variant_id: form.package_variant_id,
-            selected_template_id: form.selected_template_id,
-            notes: form.notes,
-            addons: addonsPayload,
-        };
+        const payload = new FormData();
+        payload.append('customer_name', form.customer_name);
+        payload.append('customer_email', form.customer_email);
+        payload.append('customer_phone', form.customer_phone);
+        payload.append('event_name', form.event_name);
+        payload.append('event_location', form.event_location);
+        payload.append('event_datetime', eventDatetime);
+        payload.append('service_package_id', form.service_package_id);
+        payload.append('package_variant_id', form.package_variant_id);
+        if (form.selected_template_id) {
+            payload.append('selected_template_id', form.selected_template_id);
+        }
+        payload.append('notes', form.notes);
+        payload.append('use_custom_frame', form.use_custom_frame ? '1' : '0');
+        if (customFrameFile) {
+            payload.append('custom_frame', customFrameFile);
+        }
+        addonsPayload.forEach((item, index) => {
+            payload.append(`addons[${index}][id]`, item.id);
+            payload.append(`addons[${index}][quantity]`, item.quantity);
+        });
 
         try {
-            const response = await axios.post('/api/bookings', payload);
+            const response = await axios.post('/api/bookings', payload, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
             setSubmittedBooking(response.data?.data || null);
             setSuccess(true);
         } catch (err) {
@@ -477,54 +502,82 @@ export default function Booking({ initialDate = null }) {
                                 <h3 className="type-shout !text-2xl md:!text-3xl mb-2">Frame & Addons</h3>
                                 
                                 <div>
-                                    <h4 className="font-serif text-md text-charcoal mb-4">A. Pilih Layout Frame Cetak Foto:</h4>
+                                    <h4 className="font-serif text-md text-charcoal mb-4">A. Frame yang Tersedia di MemoForia</h4>
+                                    <p className="text-xs text-warm-grey mb-4">Frame bersifat referensi. Anda tidak wajib memilih frame. Jika ingin menggunakan frame custom, pilih opsi di bawah.</p>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                                        {templatesList.map(template => (
-                                            <button
-                                                key={template.id}
-                                                onClick={() => updateForm('selected_template_id', template.id)}
-                                                className={`rounded-2xl border-2 text-left transition-all bg-white relative overflow-hidden flex flex-col ${
-                                                    form.selected_template_id == template.id
-                                                        ? 'border-primary shadow-[0_0_0_3px_rgba(var(--color-primary-rgb),0.15)]'
-                                                        : 'border-beige hover:border-primary-200'
-                                                }`}
-                                            >
-                                                {/* Preview Image */}
-                                                {template.preview_image ? (
-                                                    <div className="w-full bg-neutral-100 flex items-center justify-center overflow-hidden">
-                                                        <img
-                                                            src={template.preview_image}
-                                                            alt={`Preview ${template.name}`}
-                                                            className="w-full h-auto object-contain max-h-64"
-                                                            loading="lazy"
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="w-full bg-beige/30 flex items-center justify-center" style={{ minHeight: '8rem' }}>
-                                                        <span className="text-warm-grey text-xs">Preview tidak tersedia</span>
-                                                    </div>
-                                                )}
+                                        {templatesList.map(template => {
+                                            const imageUrl = getTemplateImageUrl(template);
+                                            return (
+                                                <button
+                                                    key={template.id}
+                                                    type="button"
+                                                    onClick={() => updateForm('selected_template_id', template.id)}
+                                                    className={`rounded-2xl border-2 text-left transition-all bg-white relative overflow-hidden flex flex-col ${
+                                                        form.selected_template_id == template.id
+                                                            ? 'border-primary shadow-[0_0_0_3px_rgba(var(--color-primary-rgb),0.15)] bg-primary-50/30'
+                                                            : 'border-beige hover:border-primary-200'
+                                                    }`}
+                                                >
+                                                    {/* Preview Image */}
+                                                    {imageUrl ? (
+                                                        <div className="w-full bg-neutral-100 flex items-center justify-center overflow-hidden">
+                                                            <img
+                                                                src={imageUrl}
+                                                                alt={`Preview ${template.name}`}
+                                                                className="w-full h-auto object-contain max-h-64"
+                                                                loading="lazy"
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-full bg-beige/30 flex items-center justify-center" style={{ minHeight: '8rem' }}>
+                                                            <span className="text-warm-grey text-xs">Preview tidak tersedia</span>
+                                                        </div>
+                                                    )}
 
-                                                {/* Info */}
-                                                <div className="p-3">
-                                                    <h5 className="font-semibold text-charcoal text-xs leading-tight">{template.name}</h5>
-                                                    <p className="text-[10px] text-warm-grey mt-0.5">{template.size} · {template.layout_type}</p>
-                                                    <p className="text-[10px] text-slate font-light">{template.frame_type}</p>
-                                                </div>
+                                                    {/* Info */}
+                                                    <div className="p-3">
+                                                        <h5 className="font-semibold text-charcoal text-xs leading-tight">{template.name}</h5>
+                                                        <p className="text-[10px] text-warm-grey mt-0.5">{template.size} · {template.layout_type}</p>
+                                                        <p className="text-[10px] text-slate font-light">{template.frame_type}</p>
+                                                    </div>
 
-                                                {/* Selected badge */}
-                                                {form.selected_template_id == template.id && (
-                                                    <span className="absolute top-2 right-2 bg-primary text-white p-1 rounded-full shadow">
-                                                        <Check size={10} />
-                                                    </span>
-                                                )}
-                                            </button>
-                                        ))}
+                                                    {/* Selected badge */}
+                                                    {form.selected_template_id == template.id && (
+                                                        <span className="absolute top-2 right-2 bg-primary text-white p-1 rounded-full shadow">
+                                                            <Check size={10} />
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
 
-                                <div>
-                                    <h4 className="font-serif text-md text-charcoal mb-4">B. Tambahkan Addons Acara (Opsional):</h4>
+                                <div className="pt-8">
+                                    <h4 className="font-serif text-md text-charcoal mb-4">B. Apakah Anda ingin menggunakan frame custom?</h4>
+                                    <div className="flex flex-col md:flex-row gap-4 mb-6">
+                                        {['Tidak', 'Ya'].map((option) => (
+                                            <button key={option} type="button" onClick={() => {
+                                                const useCustom = option === 'Ya';
+                                                updateForm('use_custom_frame', useCustom);
+                                                if (!useCustom) {
+                                                    setCustomFrameFile(null);
+                                                }
+                                            }}
+                                                className={`px-4 py-3 rounded-2xl border-2 text-sm font-semibold transition-colors ${form.use_custom_frame === (option === 'Ya') ? 'bg-primary text-white border-primary' : 'bg-white border-beige text-charcoal hover:border-primary'}`}>
+                                                {option}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {form.use_custom_frame && (
+                                        <div className="mb-8">
+                                            <label className="block text-xs font-semibold text-charcoal mb-2">Upload Frame Custom</label>
+                                            <input type="file" accept="image/png,image/jpeg,image/jpg" onChange={e => setCustomFrameFile(e.target.files?.[0] || null)}
+                                                className="w-full text-xs text-slate" />
+                                            <p className="mt-2 text-xs text-warm-grey">Frame yang diunggah akan digunakan pada hari acara dan akan direview terlebih dahulu oleh tim MemoForia. Maksimal 10 MB.</p>
+                                        </div>
+                                    )}
+                                    <h4 className="font-serif text-md text-charcoal mb-4">C. Tambahkan Addons Acara (Opsional):</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {addonsList.map(addon => {
                                             const qty = selectedAddons[addon.id] || 0;
