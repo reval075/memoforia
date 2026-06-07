@@ -16,6 +16,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class MemoforiaDummyDataSeeder extends Seeder
 {
@@ -120,61 +121,67 @@ class MemoforiaDummyDataSeeder extends Seeder
     {
         $catalog = [
             [
-                'name' => 'Soft File Only',
-                'category' => 'soft_file',
-                'description' => 'Sesi foto tanpa cetak fisik. Semua file resolusi tinggi dikirim via link digital dalam 24 jam.',
+                'name' => 'PACKAGE HEMAT',
+                'category' => 'hemat',
+                'description' => 'Paket ekonomis yang sangat cocok untuk dokumentasi digital. Dapatkan akses file foto digital berkualitas tinggi sepuasnya tanpa cetak fisik.',
+                'display_order' => 1,
+                'has_softfile' => true,
+                'has_prints' => false,
+                'has_qrcode' => true,
+                'has_gif' => true,
+                'has_custom_template' => true,
+                'has_supporting_crew' => true,
+                'has_tiket_antrian' => true,
+                'printer_type' => null,
+                'printer_description' => null,
                 'variants' => [
-                    ['name' => '1 Jam Session', 'duration_hours' => 1, 'price' => 750000, 'extra_hour_price' => 350000, 'is_unlimited' => true],
-                    ['name' => '2 Jam Session', 'duration_hours' => 2, 'price' => 1200000, 'extra_hour_price' => 300000, 'is_unlimited' => true],
-                    ['name' => '4 Jam Session', 'duration_hours' => 4, 'price' => 2100000, 'extra_hour_price' => 250000, 'is_unlimited' => true],
+                    ['name' => '1 Jam Session', 'duration_hours' => 1, 'price' => 300000, 'extra_hour_price' => 100000, 'is_unlimited' => true],
+                    ['name' => '2 Jam Session', 'duration_hours' => 2, 'price' => 400000, 'extra_hour_price' => 100000, 'is_unlimited' => true],
+                    ['name' => '3 Jam Session', 'duration_hours' => 3, 'price' => 500000, 'extra_hour_price' => 100000, 'is_unlimited' => true],
                 ],
             ],
             [
-                'name' => 'Basic Unlimited Print',
-                'category' => 'unlimited_print',
-                'description' => 'Cetak foto sepuasnya selama durasi sesi. Layout strip klasik, crew standar, backdrop basic.',
+                'name' => 'PACKAGE BASIC',
+                'category' => 'basic',
+                'description' => 'Pilihan ideal untuk meramaikan event skala kecil hingga menengah menggunakan printer inkjet standar dengan hasil cetak menawan.',
+                'display_order' => 2,
+                'has_softfile' => true,
+                'has_prints' => true,
+                'has_qrcode' => true,
+                'has_gif' => true,
+                'has_custom_template' => true,
+                'has_supporting_crew' => true,
+                'has_tiket_antrian' => true,
+                'printer_type' => 'Inkjet Printer',
+                'printer_description' => 'Kecepatan cetak standar, cocok untuk event kecil hingga menengah.',
                 'variants' => [
-                    ['name' => '2 Jam Unlimited', 'duration_hours' => 2, 'price' => 1800000, 'extra_hour_price' => 500000, 'is_unlimited' => true],
-                    ['name' => '3 Jam Unlimited', 'duration_hours' => 3, 'price' => 2400000, 'extra_hour_price' => 450000, 'is_unlimited' => true],
-                    ['name' => '5 Jam Unlimited', 'duration_hours' => 5, 'price' => 3800000, 'extra_hour_price' => 400000, 'is_unlimited' => true],
+                    ['name' => '1 Jam Unlimited Prints', 'duration_hours' => 1, 'price' => 500000, 'extra_hour_price' => 350000, 'is_unlimited' => true],
+                    ['name' => '2 Jam Unlimited Prints', 'duration_hours' => 2, 'price' => 950000, 'extra_hour_price' => 350000, 'is_unlimited' => true],
+                    ['name' => '3 Jam Unlimited Prints', 'duration_hours' => 3, 'price' => 1300000, 'extra_hour_price' => 350000, 'is_unlimited' => true],
+                    ['name' => '100 Prints Limited', 'print_limit' => 100, 'price' => 1100000, 'extra_print_price' => 500000, 'is_unlimited' => false],
+                    ['name' => '200 Prints Limited', 'print_limit' => 200, 'price' => 2000000, 'extra_print_price' => 500000, 'is_unlimited' => false],
                 ],
             ],
             [
-                'name' => 'Premium Unlimited Print',
-                'category' => 'unlimited_print',
-                'description' => 'Cetak unlimited kualitas premium, kustom frame, lighting profesional, 2 crew dedicated.',
+                'name' => 'PACKAGE PREMIUM',
+                'category' => 'premium',
+                'description' => 'Layanan kelas atas untuk event berskala besar. Cetak instan super cepat menggunakan Thermal Printer berdaya tahan tinggi serta hasil super tajam.',
+                'display_order' => 3,
+                'has_softfile' => true,
+                'has_prints' => true,
+                'has_qrcode' => true,
+                'has_gif' => true,
+                'has_custom_template' => true,
+                'has_supporting_crew' => true,
+                'has_tiket_antrian' => true,
+                'printer_type' => 'Thermal Printer',
+                'printer_description' => 'Cetak sangat cepat, hasil lebih tajam, lebih tahan lama, cocok untuk event besar.',
                 'variants' => [
-                    ['name' => '3 Jam Premium', 'duration_hours' => 3, 'price' => 3500000, 'extra_hour_price' => 800000, 'is_unlimited' => true],
-                    ['name' => '5 Jam Premium', 'duration_hours' => 5, 'price' => 5200000, 'extra_hour_price' => 750000, 'is_unlimited' => true],
-                ],
-            ],
-            [
-                'name' => 'Limited Prints',
-                'category' => 'limited_print',
-                'description' => 'Paket dengan kuota cetak tetap. Ideal untuk gathering kecil & acara perusahaan.',
-                'variants' => [
-                    ['name' => '100 Lembar', 'print_limit' => 100, 'price' => 1500000, 'is_unlimited' => false],
-                    ['name' => '200 Lembar', 'print_limit' => 200, 'price' => 2200000, 'is_unlimited' => false],
-                    ['name' => '350 Lembar', 'print_limit' => 350, 'price' => 3100000, 'is_unlimited' => false],
-                ],
-            ],
-            [
-                'name' => 'Wedding Photobooth',
-                'category' => 'event',
-                'description' => 'Paket lengkap pernikahan: unlimited print 4 jam, guest book digital, backdrop custom, 3 crew.',
-                'variants' => [
-                    ['name' => 'Silver (3 Jam)', 'duration_hours' => 3, 'price' => 4500000, 'extra_hour_price' => 900000, 'is_unlimited' => true],
-                    ['name' => 'Gold (5 Jam)', 'duration_hours' => 5, 'price' => 6500000, 'extra_hour_price' => 850000, 'is_unlimited' => true],
-                    ['name' => 'Platinum (8 Jam)', 'duration_hours' => 8, 'price' => 9500000, 'extra_hour_price' => 800000, 'is_unlimited' => true],
-                ],
-            ],
-            [
-                'name' => 'Corporate & Brand Activation',
-                'category' => 'event',
-                'description' => 'Photobooth branded untuk product launch, expo, dan activations. Termasuk overlay logo & data capture.',
-                'variants' => [
-                    ['name' => 'Half Day (4 Jam)', 'duration_hours' => 4, 'price' => 5500000, 'is_unlimited' => true],
-                    ['name' => 'Full Day (8 Jam)', 'duration_hours' => 8, 'price' => 8900000, 'is_unlimited' => true],
+                    ['name' => '1 Jam Unlimited Prints', 'duration_hours' => 1, 'price' => 699000, 'extra_hour_price' => 500000, 'is_unlimited' => true],
+                    ['name' => '2 Jam Unlimited Prints', 'duration_hours' => 2, 'price' => 1200000, 'extra_hour_price' => 500000, 'is_unlimited' => true],
+                    ['name' => '3 Jam Unlimited Prints', 'duration_hours' => 3, 'price' => 1480000, 'extra_hour_price' => 500000, 'is_unlimited' => true],
+                    ['name' => '100 Prints Limited', 'print_limit' => 100, 'price' => 1600000, 'extra_print_price' => 500000, 'is_unlimited' => false],
+                    ['name' => '200 Prints Limited', 'print_limit' => 200, 'price' => 2300000, 'extra_print_price' => 500000, 'is_unlimited' => false],
                 ],
             ],
         ];
@@ -188,13 +195,12 @@ class MemoforiaDummyDataSeeder extends Seeder
                 array_merge($item, ['is_active' => true])
             );
 
+            // Clean up existing variants to avoid duplicate old variants
+            $package->packageVariants()->delete();
+
             foreach ($variants as $variant) {
-                PackageVariant::updateOrCreate(
-                    [
-                        'service_package_id' => $package->id,
-                        'name' => $variant['name'],
-                    ],
-                    $variant
+                PackageVariant::create(
+                    array_merge($variant, ['service_package_id' => $package->id])
                 );
             }
         }
@@ -202,18 +208,28 @@ class MemoforiaDummyDataSeeder extends Seeder
 
     protected function seedAddons(): void
     {
+        // Delete all old addons
+        Schema::disableForeignKeyConstraints();
+        Addon::truncate();
+        Schema::enableForeignKeyConstraints();
+
         $addons = [
-            ['name' => 'Gantungan Kunci Akrilik', 'description' => 'Keychain akrilik bening per pcs, sisipkan mini foto.', 'price' => 10000],
-            ['name' => 'Custom Backdrop', 'description' => 'Backdrop digital & fisik disesuaikan tema acara.', 'price' => 500000],
-            ['name' => 'Extra 1 Hour', 'description' => 'Perpanjangan operational photobooth 1 jam.', 'price' => 400000],
-            ['name' => 'Props Premium Set', 'description' => '50+ props tematik (party, wedding, corporate).', 'price' => 350000],
-            ['name' => 'Live Slideshow Screen', 'description' => 'Layar 43" menampilkan foto tamu secara live.', 'price' => 750000],
-            ['name' => 'Crew Tambahan', 'description' => '1 operator tambahan untuk event ramai.', 'price' => 300000],
-            ['name' => 'Green Screen Setup', 'description' => 'Background digital interchangeable + 5 preset scene.', 'price' => 600000],
+            [
+                'name' => 'Keychain 10 pcs',
+                'description' => 'Gantungan kunci akrilik custom sebanyak 10 buah, cocok untuk buah tangan tamu.',
+                'price' => 50000,
+                'display_order' => 1
+            ],
+            [
+                'name' => 'Custom Background',
+                'description' => 'Latar belakang studio fisik/digital khusus yang didesain sesuai dengan tema acara Anda.',
+                'price' => 400000,
+                'display_order' => 2
+            ],
         ];
 
         foreach ($addons as $addon) {
-            Addon::updateOrCreate(['name' => $addon['name']], array_merge($addon, ['is_active' => true]));
+            Addon::create(array_merge($addon, ['is_active' => true]));
         }
     }
 
@@ -226,6 +242,8 @@ class MemoforiaDummyDataSeeder extends Seeder
                 'frame_type'    => 'Classic',
                 'layout_type'   => '4-Grid Vertical Strip',
                 'preview_image' => '/images/templates/template-01.png',
+                'description'   => 'Desain strip klasik gaya retro film dengan 4 frame vertikal.',
+                'display_order' => 1,
             ],
             [
                 'name'          => 'Modern 4R Grid',
@@ -233,6 +251,8 @@ class MemoforiaDummyDataSeeder extends Seeder
                 'frame_type'    => 'Minimalist',
                 'layout_type'   => '4-Grid Vertical Strip',
                 'preview_image' => '/images/templates/template-02.png',
+                'description'   => 'Gaya minimalis modern layout grid untuk hasil cetakan 4R premium.',
+                'display_order' => 2,
             ],
             [
                 'name'          => 'Elegant Single 4R',
@@ -240,6 +260,8 @@ class MemoforiaDummyDataSeeder extends Seeder
                 'frame_type'    => 'Vintage',
                 'layout_type'   => '4-Grid Vertical Strip',
                 'preview_image' => '/images/templates/template-04.png',
+                'description'   => 'Frame tunggal elegan dengan sentuhan artistik vintage.',
+                'display_order' => 3,
             ],
             [
                 'name'          => 'Wedding Floral Frame',
@@ -247,6 +269,8 @@ class MemoforiaDummyDataSeeder extends Seeder
                 'frame_type'    => 'Floral',
                 'layout_type'   => '2-Row Landscape Strip',
                 'preview_image' => '/images/templates/template-05.jpg',
+                'description'   => 'Frame bermotif floral romantis, sangat cocok untuk dokumentasi pernikahan.',
+                'display_order' => 4,
             ],
             [
                 'name'          => 'Corporate Clean Strip',
@@ -254,6 +278,8 @@ class MemoforiaDummyDataSeeder extends Seeder
                 'frame_type'    => 'Corporate',
                 'layout_type'   => '4-Grid Vertical Strip',
                 'preview_image' => '/images/templates/template-03.jpg',
+                'description'   => 'Tampilan bersih, formal, dan profesional dengan ruang custom logo perusahaan.',
+                'display_order' => 5,
             ],
             [
                 'name'          => 'Polaroid Style',
@@ -261,6 +287,8 @@ class MemoforiaDummyDataSeeder extends Seeder
                 'frame_type'    => 'Polaroid',
                 'layout_type'   => 'Single with Caption',
                 'preview_image' => null,
+                'description'   => 'Gaya klasik retro Polaroid dengan frame putih ikonik dan area catatan di bagian bawah.',
+                'display_order' => 6,
             ],
         ];
 

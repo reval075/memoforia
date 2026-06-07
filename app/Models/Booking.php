@@ -35,6 +35,9 @@ class Booking extends Model
         'branch_id',
         'availability_id',
         'completed_at',
+        'custom_frame_path',
+        'custom_frame_filename',
+        'custom_frame_uploaded_at',
     ];
 
     protected $casts = [
@@ -45,6 +48,7 @@ class Booking extends Model
         'settlement_due_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'completed_at' => 'datetime',
+        'custom_frame_uploaded_at' => 'datetime',
     ];
 
     /**

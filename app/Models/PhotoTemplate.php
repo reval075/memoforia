@@ -16,6 +16,13 @@ class PhotoTemplate extends Model
         'frame_type',
         'layout_type',
         'is_active',
+        'description',
+        'display_order',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'display_order' => 'integer',
     ];
 
     public function bookings()

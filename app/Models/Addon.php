@@ -15,6 +15,13 @@ class Addon extends Model
         'price',
         'image',
         'is_active',
+        'display_order',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'display_order' => 'integer',
+        'price' => 'decimal:2',
     ];
 
     public function bookings()

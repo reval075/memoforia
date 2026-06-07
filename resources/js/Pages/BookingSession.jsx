@@ -27,7 +27,7 @@ export default function BookingSession() {
 
     return (
         <div className="min-h-screen bg-off-white text-charcoal overflow-hidden relative">
-            <Head title="Booking Session — MemForia" />
+            <Head title="Booking Session — MemoForia" />
 
             <div
                 className={`absolute inset-0 z-0 transition-all duration-700 ${
@@ -45,11 +45,11 @@ export default function BookingSession() {
                 <Link href="/" className="flex items-center gap-3 group">
                     <img
                         src="/images/logo.png"
-                        alt="MemForia"
+                        alt="MemoForia"
                         className="h-9 w-9 rounded-full object-cover shadow-md shadow-primary/20 group-hover:ring-2 group-hover:ring-primary/30 transition-all"
                     />
                     <span className="font-serif text-lg text-charcoal group-hover:text-primary-dark transition-colors">
-                        MemForia
+                        MemoForia
                     </span>
                 </Link>
                 {isRevealed && (

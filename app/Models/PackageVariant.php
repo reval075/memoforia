@@ -16,7 +16,15 @@ class PackageVariant extends Model
         'print_limit',
         'price',
         'extra_hour_price',
+        'extra_print_price',
         'is_unlimited',
+    ];
+
+    protected $casts = [
+        'price' => 'decimal:2',
+        'extra_hour_price' => 'decimal:2',
+        'extra_print_price' => 'decimal:2',
+        'is_unlimited' => 'boolean',
     ];
 
     public function servicePackage()

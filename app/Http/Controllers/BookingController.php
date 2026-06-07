@@ -32,11 +32,12 @@ class BookingController extends Controller
             'event_datetime' => 'required|date|after_or_equal:today',
             'service_package_id' => 'required|exists:service_packages,id',
             'package_variant_id' => 'required|exists:package_variants,id',
-            'selected_template_id' => 'required|exists:photo_templates,id',
+            'selected_template_id' => 'nullable|exists:photo_templates,id',
             'notes' => 'nullable|string',
             'addons' => 'nullable|array', // e.g. [['id' => 1, 'quantity' => 2]]
             'addons.*.id' => 'exists:addons,id',
             'addons.*.quantity' => 'integer|min:1',
+            'custom_frame_file' => 'nullable|file|image|max:10240|mimes:png,jpg,jpeg',
         ]);
 
         $eventDatetime = Carbon::parse($validated['event_datetime']);
@@ -93,12 +94,24 @@ class BookingController extends Controller
             }
         }
 
+        // Handle custom frame file upload
+        $customFramePath = null;
+        $customFrameFilename = null;
+        $customFrameUploadedAt = null;
+
+        if ($request->hasFile('custom_frame_file')) {
+            $file = $request->file('custom_frame_file');
+            $customFramePath = $file->store('custom-frames', 'public');
+            $customFrameFilename = $file->getClientOriginalName();
+            $customFrameUploadedAt = now();
+        }
+
         // Generate booking code
         $datePart = $eventDatetime->format('Ymd');
         $randomPart = strtoupper(Str::random(5));
         $bookingCode = "MEMO-{$datePart}-{$randomPart}";
 
-        $booking = DB::transaction(function () use ($validated, $bookingCode, $eventDate, $eventDatetime, $variant, $totalPrice, $addonData) {
+        $booking = DB::transaction(function () use ($validated, $bookingCode, $eventDate, $eventDatetime, $variant, $totalPrice, $addonData, $customFramePath, $customFrameFilename, $customFrameUploadedAt) {
             $booking = Booking::create([
                 'booking_code' => $bookingCode,
                 'customer_name' => $validated['customer_name'],
@@ -110,7 +123,10 @@ class BookingController extends Controller
                 'event_datetime' => $eventDatetime,
                 'service_package_id' => $validated['service_package_id'],
                 'package_variant_id' => $validated['package_variant_id'],
-                'selected_template_id' => $validated['selected_template_id'],
+                'selected_template_id' => $validated['selected_template_id'] ?? null,
+                'custom_frame_path' => $customFramePath,
+                'custom_frame_filename' => $customFrameFilename,
+                'custom_frame_uploaded_at' => $customFrameUploadedAt,
                 'notes' => $validated['notes'] ?? null,
                 'status' => 'pending_approval',
                 'payment_status' => 'unpaid',
@@ -747,6 +763,9 @@ class BookingController extends Controller
             'event_datetime' => $booking->event_datetime,
             'total_price' => $booking->total_price,
             'notes' => $booking->notes,
+            'custom_frame_path' => $booking->custom_frame_path,
+            'custom_frame_filename' => $booking->custom_frame_filename,
+            'custom_frame_uploaded_at' => $booking->custom_frame_uploaded_at ? $booking->custom_frame_uploaded_at->toIso8601String() : null,
             'approved_at' => $booking->approved_at,
             'confirmed_at' => $booking->confirmed_at,
             'cancelled_at' => $booking->cancelled_at,
