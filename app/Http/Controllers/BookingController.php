@@ -39,6 +39,8 @@ class BookingController extends Controller
             'addons' => 'nullable|array', // e.g. [['id' => 1, 'quantity' => 2]]
             'addons.*.id' => 'exists:addons,id',
             'addons.*.quantity' => 'integer|min:1',
+            'extra_hours' => 'nullable|integer|min:0',
+            'extra_prints' => 'nullable|integer|min:0',
         ]);
 
         $eventDatetime = Carbon::parse($validated['event_datetime']);
@@ -79,6 +81,18 @@ class BookingController extends Controller
         }
 
         $totalPrice = $variant->price;
+
+        $extraHours = isset($validated['extra_hours']) ? intval($validated['extra_hours']) : 0;
+        if ($extraHours > 0) {
+            $extraHourPrice = $variant->extra_hour_price ? floatval($variant->extra_hour_price) : 0;
+            $totalPrice += $extraHours * $extraHourPrice;
+        }
+
+        $extraPrints = isset($validated['extra_prints']) ? intval($validated['extra_prints']) : 0;
+        if ($extraPrints > 0) {
+            $totalPrice += ($extraPrints / 50) * 500000;
+        }
+
         $addonData = [];
 
         if (!empty($validated['addons'])) {
@@ -112,7 +126,7 @@ class BookingController extends Controller
         $randomPart = strtoupper(Str::random(5));
         $bookingCode = "MEMO-{$datePart}-{$randomPart}";
 
-        $booking = DB::transaction(function () use ($validated, $bookingCode, $eventDate, $eventDatetime, $variant, $totalPrice, $addonData, $customFrameData) {
+        $booking = DB::transaction(function () use ($validated, $bookingCode, $eventDate, $eventDatetime, $variant, $totalPrice, $addonData, $customFrameData, $extraHours, $extraPrints) {
             $booking = Booking::create(array_merge([
                 'booking_code' => $bookingCode,
                 'customer_name' => $validated['customer_name'],
@@ -130,6 +144,8 @@ class BookingController extends Controller
                 'status' => 'pending_approval',
                 'payment_status' => 'unpaid',
                 'total_price' => $totalPrice,
+                'extra_hours' => $extraHours,
+                'extra_prints' => $extraPrints,
             ], $customFrameData));
 
             if (!empty($addonData)) {
@@ -788,6 +804,7 @@ class BookingController extends Controller
                 'duration_hours' => $booking->packageVariant->duration_hours,
                 'print_limit' => $booking->packageVariant->print_limit,
                 'is_unlimited' => (bool) $booking->packageVariant->is_unlimited,
+                'extra_hour_price' => $booking->packageVariant->extra_hour_price,
             ] : null,
             'selected_template' => $booking->selectedTemplate ? [
                 'id' => $booking->selectedTemplate->id,
@@ -811,6 +828,8 @@ class BookingController extends Controller
                 'created_at'     => $payment->created_at,
                 'verified_at'    => $payment->verified_at,
             ])->values(),
+            'extra_hours' => $booking->extra_hours,
+            'extra_prints' => $booking->extra_prints,
         ];
     }
 

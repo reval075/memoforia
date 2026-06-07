@@ -40,6 +40,8 @@ class Booking extends Model
         'custom_frame_path',
         'custom_frame_original_name',
         'custom_frame_uploaded_at',
+        'extra_hours',
+        'extra_prints',
     ];
 
     protected $casts = [

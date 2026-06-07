@@ -1,7 +1,7 @@
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { ArrowRight, ArrowLeft, CheckCircle, Loader2, Calendar, Package, User, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import BookingSuccess from '../components/BookingSuccess';
@@ -77,6 +77,8 @@ export default function Booking({ initialDate = null }) {
         package_variant_id: '',
         selected_template_id: '',
         use_custom_frame: false,
+        extra_hours: 0,
+        extra_prints: 0,
     });
 
     // Addons quantities mapping: { addon_id: quantity }
@@ -137,9 +139,206 @@ export default function Booking({ initialDate = null }) {
 
     const updateForm = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
+    const sortedPackages = useMemo(() => {
+        return [...packages].sort((a, b) => {
+            const order = ['hemat', 'basic', 'premium'];
+            const nameA = (a.name || '').toLowerCase();
+            const nameB = (b.name || '').toLowerCase();
+            
+            const indexA = order.findIndex(o => nameA.includes(o));
+            const indexB = order.findIndex(o => nameB.includes(o));
+            
+            const valA = indexA === -1 ? 99 : indexA;
+            const valB = indexB === -1 ? 99 : indexB;
+            
+            return valA - valB;
+        });
+    }, [packages]);
+
     const selectedPackage = packages.find(p => p.id == form.service_package_id);
     const selectedVariant = selectedPackage?.package_variants?.find(v => v.id == form.package_variant_id);
     const selectedTemplate = templatesList.find(t => t.id == form.selected_template_id);
+
+    const variantSectionRef = useRef(null);
+
+    // UX: tampilkan section variant secara bertahap setelah package dipilih
+    const [showVariants, setShowVariants] = useState(form.service_package_id !== '');
+
+    // Infer printer info from DB fields: category and includes_prints
+    const getPackagePrinterInfo = (pkg) => {
+        if (!pkg) return null;
+        const name = (pkg.name || '').toLowerCase();
+        const category = (pkg.category || '').toLowerCase();
+
+        if (name.includes('premium') || category.includes('premium')) {
+            return {
+                label: 'Thermal Printer',
+                notes: [
+                    'Cetak fisik tersedia',
+                    'Cetak sangat cepat',
+                    'Hasil lebih tajam',
+                    'Lebih tahan lama',
+                    'Cocok untuk event besar'
+                ],
+                icon: '⚡',
+                isSoftfileOnly: false,
+                isHemat: false,
+            };
+        }
+
+        if (name.includes('basic') || category.includes('basic')) {
+            return {
+                label: 'Inkjet Printer',
+                notes: [
+                    'Cetak fisik tersedia',
+                    'Kecepatan cetak standar',
+                    'Cocok untuk event kecil hingga menengah'
+                ],
+                icon: '🖨️',
+                isSoftfileOnly: false,
+                isHemat: false,
+            };
+        }
+
+        return {
+            label: 'Softfile Only',
+            notes: [
+                'Tanpa layanan cetak fisik',
+                'Semua foto dikirim via link digital',
+                'QR Code akses gallery'
+            ],
+            icon: '📱',
+            isSoftfileOnly: true,
+            isHemat: true,
+        };
+    };
+
+    const getPackageBadgeLabel = (pkg) => {
+        const category = (pkg?.category || '').toLowerCase();
+        const variants = pkg?.package_variants || [];
+        const maxPrice = variants.reduce((max, v) => Math.max(max, Number(v.price || 0)), 0);
+        if (category === 'event' || maxPrice >= 5000000) return 'Most Recommended';
+        return null;
+    };
+
+    // Use DB boolean includes_* fields — no hardcoding
+    const getIncludeFeatures = (pkg) => {
+        if (!pkg) return [];
+        const features = [];
+        const name = (pkg.name || '').toLowerCase();
+        const category = (pkg.category || '').toLowerCase();
+        const isHemat = name.includes('hemat') || category.includes('hemat');
+
+        // Softfile feature
+        if (pkg.includes_softfile || pkg.has_softfile) {
+            features.push(isHemat ? 'Unlimited Softfile' : 'Softfile');
+        }
+
+        // Prints feature
+        if (pkg.includes_prints || pkg.has_prints) {
+            features.push(isHemat ? 'Cetak Foto' : 'Unlimited / Limited Prints');
+        }
+
+        // QR Code feature
+        if (pkg.includes_qr_code || pkg.has_qrcode) {
+            features.push('QR Code Gallery');
+        }
+
+        // GIF feature
+        if (pkg.includes_gif || pkg.has_gif) {
+            features.push('GIF');
+        }
+
+        // Custom Template feature
+        if (pkg.includes_custom_template || pkg.has_custom_template) {
+            features.push('Free Custom Template');
+        }
+
+        // Tiket Antrian feature
+        if (pkg.includes_tiket_antrian || pkg.has_tiket_antrian) {
+            features.push('Tiket Antrian');
+        }
+
+        // Supporting Crew feature
+        if (pkg.includes_supporting_crew || pkg.has_supporting_crew) {
+            features.push('Supporting Crew');
+        }
+
+        return features;
+    };
+
+    const getAdditionalServicesFromAddons = (pkg) => {
+        const keychain = addonsList.find(a => (a?.name || '').toLowerCase().includes('kunci'))
+            || addonsList.find(a => (a?.name || '').toLowerCase().includes('keychain'));
+
+        const background = addonsList.find(a => (a?.name || '').toLowerCase().includes('backdrop'))
+            || addonsList.find(a => (a?.name || '').toLowerCase().includes('background'))
+            || addonsList.find(a => (a?.name || '').toLowerCase().includes('custom'));
+
+        const isHemat = (pkg?.name || '').toLowerCase().includes('hemat');
+        const items = [];
+        if (!isHemat && keychain) items.push(keychain);
+        if (background) items.push(background);
+
+        // Deduplicate by id
+        const uniq = [];
+        const seen = new Set();
+        items.forEach(it => {
+            if (!it?.id) return;
+            if (seen.has(it.id)) return;
+            seen.add(it.id);
+            uniq.push(it);
+        });
+        return uniq.slice(0, 2);
+    };
+
+    const getVariantDescription = (variant) => {
+        const name = (variant?.name || '').toLowerCase();
+        const isUnlimited = !!variant?.is_unlimited;
+        const duration = variant?.duration_hours;
+        const limit = variant?.print_limit;
+
+        if (isUnlimited) {
+            if (duration === 1) return 'Cocok untuk gathering kecil dan acara keluarga.';
+            if (duration === 2) return 'Pilihan ideal untuk seminar, wisuda, atau acara kantor.';
+            if (duration === 3) return 'Untuk event panjang dengan aktivitas padat dan tamu ramai.';
+            return `Layanan cetak unlimited selama ${duration} jam untuk memuaskan semua tamu Anda.`;
+        } else {
+            if (limit <= 100) return 'Cocok untuk acara komunitas atau gathering kecil dengan budget hemat.';
+            if (limit <= 200) return 'Untuk event skala menengah dengan banyak peserta.';
+            return `Cetak terbatas hingga ${limit} lembar, pilihan tepat untuk efisiensi budget.`;
+        }
+    };
+
+    const handleChoosePackage = (pkgId) => {
+        setForm(prev => ({
+            ...prev,
+            service_package_id: pkgId,
+            package_variant_id: '',
+            extra_hours: 0,
+            extra_prints: 0
+        }));
+        setShowVariants(true);
+        setSelectedAddons({});
+
+        setTimeout(() => {
+            variantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 60);
+    };
+
+    const handleChooseVariant = (variantId) => {
+        setForm(prev => ({
+            ...prev,
+            package_variant_id: variantId,
+            extra_hours: 0,
+            extra_prints: 0
+        }));
+
+        // Scroll to bottom of variants so user sees the "Lanjut" button
+        setTimeout(() => {
+            variantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 60);
+    };
 
     const getTemplateImageUrl = (template) => {
         if (!template) return null;
@@ -149,9 +348,53 @@ export default function Booking({ initialDate = null }) {
         return null;
     };
 
+    // Compute the variant with the highest duration_hours for this package (for Extra Hour eligibility)
+    const maxDurationVariant = useMemo(() => {
+        if (!selectedPackage) return null;
+        const variants = (selectedPackage.package_variants || []).filter(v => v.duration_hours != null);
+        if (variants.length === 0) return null;
+        return variants.reduce((best, v) =>
+            Number(v.duration_hours) > Number(best.duration_hours) ? v : best
+        );
+    }, [selectedPackage]);
+
+    // Compute the variant with the highest print_limit for limited-print variants (for Extra Prints eligibility)
+    const maxPrintLimitVariant = useMemo(() => {
+        if (!selectedPackage) return null;
+        const limited = (selectedPackage.package_variants || []).filter(v => !v.is_unlimited && v.print_limit != null);
+        if (limited.length === 0) return null;
+        return limited.reduce((best, v) =>
+            Number(v.print_limit) > Number(best.print_limit) ? v : best
+        );
+    }, [selectedPackage]);
+
+    // Whether selected variant qualifies for Extra Hour counter
+    const isMaxDurationSelected = !!(selectedVariant &&
+        maxDurationVariant &&
+        selectedVariant.id === maxDurationVariant.id &&
+        Number(selectedVariant.extra_hour_price) > 0
+    );
+
+    // Whether selected variant qualifies for Extra Prints counter
+    const isMaxPrintLimitSelected = !!(selectedVariant &&
+        maxPrintLimitVariant &&
+        selectedVariant.id === maxPrintLimitVariant.id
+    );
+
     // Calculate dynamic total price on frontend
     const calculateTotalPrice = () => {
         let price = selectedVariant ? Number(selectedVariant.price) : 0;
+
+        // Extra Hours cost (price per hour from selected variant DB field)
+        if (form.extra_hours > 0 && selectedVariant?.extra_hour_price) {
+            price += form.extra_hours * Number(selectedVariant.extra_hour_price);
+        }
+
+        // Extra Prints cost (500k per 50 prints)
+        if (form.extra_prints > 0) {
+            price += (form.extra_prints / 50) * 500000;
+        }
+
         Object.entries(selectedAddons).forEach(([addonId, qty]) => {
             const add = addonsList.find(a => a.id == addonId);
             if (add && qty > 0) {
@@ -294,6 +537,9 @@ export default function Booking({ initialDate = null }) {
         if (customFrameFile) {
             payload.append('custom_frame', customFrameFile);
         }
+        // Extra Hours & Prints — only send if applicable
+        payload.append('extra_hours', isMaxDurationSelected ? String(form.extra_hours) : '0');
+        payload.append('extra_prints', isMaxPrintLimitSelected ? String(form.extra_prints) : '0');
         addonsPayload.forEach((item, index) => {
             payload.append(`addons[${index}][id]`, item.id);
             payload.append(`addons[${index}][quantity]`, item.quantity);
@@ -451,38 +697,411 @@ export default function Booking({ initialDate = null }) {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -24 }}
                                 transition={{ duration: motionTokens.duration.base, ease: motionTokens.ease.out }}
-                                className="space-y-8"
+                                className="space-y-6"
                             >
-                                <h3 className="type-shout !text-2xl md:!text-3xl mb-2 flex items-center gap-3">
-                                    <Package size={28} className="text-primary shrink-0" /> Pilih Paket
-                                </h3>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    {packages.map(pkg => (
-                                        <button key={pkg.id} onClick={() => { updateForm('service_package_id', pkg.id); updateForm('package_variant_id', ''); }}
-                                            className={`p-5 rounded-2xl border-2 text-left transition-all shadow-[4px_4px_0_0_rgba(44,62,80,0.08)] ${form.service_package_id == pkg.id ? 'border-primary bg-primary-50/60 -translate-y-1' : 'border-charcoal/10 hover:border-primary bg-white'}`}>
-                                            <h4 className="font-serif text-md text-charcoal font-semibold mb-1">{pkg.name}</h4>
-                                            <p className="text-xs text-warm-grey capitalize">Kategori: {pkg.category?.replace('_', ' ')}</p>
-                                            <p className="text-xs text-slate font-light mt-2 line-clamp-3">{pkg.description}</p>
-                                        </button>
-                                    ))}
+                                <div>
+                                    <h3 className="type-shout !text-2xl md:!text-3xl mb-1 flex items-center gap-3">
+                                        <Package size={28} className="text-primary shrink-0" /> Pilih Paket
+                                    </h3>
+                                    <p className="text-sm text-warm-grey font-light">Pilih paket yang paling sesuai dengan kebutuhan acara Anda.</p>
                                 </div>
 
-                                {selectedPackage && (
-                                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-off-white/50 p-6 rounded-2xl border border-beige">
-                                        <h4 className="font-serif text-md text-charcoal mb-4">Pilih Varian Durasi / Jumlah Cetakan:</h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            {selectedPackage.package_variants?.map(variant => (
-                                                <button key={variant.id} onClick={() => updateForm('package_variant_id', variant.id)}
-                                                    className={`p-5 rounded-xl border-2 text-left transition-all relative overflow-hidden bg-white ${form.package_variant_id == variant.id ? 'border-primary bg-primary-50/20' : 'border-beige hover:border-primary-200'}`}>
-                                                    <h5 className="font-medium text-sm text-charcoal mb-1">{variant.name}</h5>
-                                                    <p className="text-lg font-serif text-primary mt-1">Rp {Number(variant.price).toLocaleString('id-ID')}</p>
-                                                    
-                                                    {variant.duration_hours && <span className="text-[10px] text-warm-grey uppercase tracking-wider block mt-2">Operational: {variant.duration_hours} Jam</span>}
-                                                    {variant.print_limit && <span className="text-[10px] text-warm-grey uppercase tracking-wider block mt-2">Batas Cetak: {variant.print_limit} Lembar</span>}
-                                                    {variant.is_unlimited ? <span className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider block mt-1">Cetak Unlimited</span> : null}
-                                                </button>
-                                            ))}
+                                {/* Stacked full-width package cards */}
+                                <div className="flex flex-col gap-5">
+                                    {sortedPackages.map(pkg => {
+                                        const isSelected = form.service_package_id == pkg.id;
+                                        const badge = getPackageBadgeLabel(pkg);
+                                        const printerInfo = getPackagePrinterInfo(pkg);
+                                        const includeFeatures = getIncludeFeatures(pkg);
+                                        const isPremium = (pkg?.name || '').toLowerCase().includes('premium');
+
+                                        // Calculate starting price from cheapest variant
+                                        const variantPrices = (pkg.package_variants || []).map(v => Number(v.price)).filter(p => p > 0);
+                                        const startingPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
+
+                                        return (
+                                            <motion.div
+                                                key={pkg.id}
+                                                layout
+                                                transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+                                                className={`relative rounded-3xl border-2 transition-all duration-300 overflow-hidden bg-white ${
+                                                    isSelected
+                                                        ? 'border-primary shadow-[0_8px_40px_0_rgba(155,181,211,0.35)] -translate-y-1'
+                                                        : isPremium
+                                                            ? 'border-accent/60 shadow-[0_4px_24px_0_rgba(232,196,77,0.15)] hover:border-accent hover:shadow-[0_8px_32px_0_rgba(232,196,77,0.2)]'
+                                                            : 'border-charcoal/10 shadow-[0_2px_16px_0_rgba(44,62,80,0.06)] hover:border-primary/50 hover:shadow-[0_4px_24px_0_rgba(155,181,211,0.2)]'
+                                                }`}
+                                            >
+                                                {/* Premium top accent bar */}
+                                                {isPremium && (
+                                                    <div className="h-1 w-full bg-gradient-to-r from-accent via-accent-light to-accent" />
+                                                )}
+
+                                                {/* Selected indicator stripe */}
+                                                {isSelected && !isPremium && (
+                                                    <div className="h-1 w-full bg-gradient-to-r from-primary to-primary-light" />
+                                                )}
+
+                                                <div className="p-7 md:p-9">
+                                                    {/* Card Header */}
+                                                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-3 flex-wrap mb-2">
+                                                                <h4 className="font-serif text-2xl md:text-3xl text-charcoal font-semibold leading-tight">
+                                                                    {pkg.name}
+                                                                </h4>
+                                                                {isSelected && (
+                                                                    <motion.span
+                                                                        initial={{ opacity: 0, scale: 0.8 }}
+                                                                        animate={{ opacity: 1, scale: 1 }}
+                                                                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-bold uppercase tracking-wider border border-primary/20"
+                                                                    >
+                                                                        <Check size={11} /> Package Terpilih
+                                                                    </motion.span>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Starting Price */}
+                                                            {startingPrice !== null && (
+                                                                <div className="flex items-baseline gap-2 mt-1">
+                                                                    <span className="text-xs text-warm-grey font-light">Mulai dari</span>
+                                                                    <span className={`font-serif font-semibold text-2xl md:text-3xl ${isPremium ? 'text-accent' : 'text-primary'}`}>
+                                                                        Rp {startingPrice.toLocaleString('id-ID')}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Category tag */}
+                                                            {pkg.category && (
+                                                                <span className="inline-block mt-2 px-3 py-1 rounded-full bg-beige text-charcoal/70 text-[11px] font-semibold uppercase tracking-wider capitalize">
+                                                                    {pkg.category.replace(/_/g, ' ')}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Badge */}
+                                                        {badge && (
+                                                            <div className="shrink-0">
+                                                                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-gradient-to-br from-accent to-accent-light text-charcoal text-[12px] font-bold uppercase tracking-wider shadow-md">
+                                                                    ★ {badge}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Description */}
+                                                    <p className="text-sm md:text-base text-slate font-light leading-relaxed mb-7 max-w-3xl">
+                                                        {pkg.description}
+                                                    </p>
+
+                                                    {/* Features + Printer — two column layout */}
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                                        {/* Include Features */}
+                                                        <div>
+                                                            <p className="text-[11px] font-bold uppercase tracking-widest text-charcoal/60 mb-3">
+                                                                Sudah Termasuk
+                                                            </p>
+                                                            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
+                                                                {includeFeatures.map((f, idx) => (
+                                                                    <li key={idx} className="flex items-center gap-2 text-sm text-slate">
+                                                                        <span className="w-5 h-5 shrink-0 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
+                                                                            <Check size={12} />
+                                                                        </span>
+                                                                        <span className="leading-snug">{f}</span>
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+
+                                                        {/* Printer Info */}
+                                                        {printerInfo && (
+                                                            <div>
+                                                                <p className="text-[11px] font-bold uppercase tracking-widest text-charcoal/60 mb-3">
+                                                                    Layanan Cetak / Device
+                                                                </p>
+                                                                <div className={`inline-flex items-center gap-2.5 px-4 py-3 rounded-2xl border text-sm font-medium ${
+                                                                    isPremium
+                                                                        ? 'bg-amber-50/60 border-amber-200/60 text-amber-800'
+                                                                        : printerInfo.isHemat
+                                                                            ? 'bg-blue-50/60 border-blue-200/60 text-blue-800'
+                                                                            : 'bg-beige/50 border-beige text-slate'
+                                                                }`}>
+                                                                    <span className="text-lg">{printerInfo.icon}</span>
+                                                                    <span>{printerInfo.label}</span>
+                                                                    {isPremium && (
+                                                                        <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider bg-amber-100 px-2 py-0.5 rounded-full">
+                                                                            Pro
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="mt-2 space-y-1">
+                                                                    {printerInfo.notes.map((note, idx) => (
+                                                                        <p key={idx} className="text-[11px] text-warm-grey leading-relaxed">
+                                                                            • {note}
+                                                                        </p>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* CTA Button */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleChoosePackage(pkg.id)}
+                                                        className={`w-full py-4 rounded-2xl font-bold text-base transition-all duration-300 border-2 ${
+                                                            isSelected
+                                                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                                                                : isPremium
+                                                                    ? 'bg-white text-charcoal border-accent/60 hover:bg-accent hover:border-accent hover:text-charcoal hover:shadow-md'
+                                                                    : 'bg-white text-charcoal border-charcoal/15 hover:border-primary hover:text-primary hover:shadow-sm'
+                                                        }`}
+                                                    >
+                                                        {isSelected ? (
+                                                            <span className="flex items-center justify-center gap-2">
+                                                                <Check size={18} /> Package Terpilih
+                                                            </span>
+                                                        ) : (
+                                                            'Pilih Package'
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Variant Section — appears after package is chosen */}
+                                <div ref={variantSectionRef} />
+
+                                {showVariants && selectedPackage && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 16 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                                        className="rounded-3xl border-2 border-primary/20 bg-gradient-to-br from-primary-50/60 to-white overflow-hidden shadow-[0_4px_32px_0_rgba(155,181,211,0.2)]"
+                                    >
+                                        {/* Variant section header */}
+                                        <div className="px-7 md:px-9 py-6 border-b border-primary/10 bg-primary/5">
+                                            <p className="text-[11px] font-bold uppercase tracking-widest text-primary/70 mb-1">Langkah berikutnya</p>
+                                            <h4 className="font-serif text-xl md:text-2xl text-charcoal font-semibold">
+                                                Varian {selectedPackage.name}
+                                            </h4>
+                                            <p className="text-sm text-warm-grey font-light mt-1">
+                                                Pilih durasi atau jumlah cetakan sesuai kebutuhan acara Anda.
+                                            </p>
+                                        </div>
+
+                                        <div className="px-7 md:px-9 py-7">
+                                            {/* Group variants: unlimited vs limited */}
+                                            {(() => {
+                                                const variants = selectedPackage.package_variants || [];
+                                                const unlimitedVariants = variants.filter(v => v.is_unlimited);
+                                                const limitedVariants = variants.filter(v => !v.is_unlimited);
+
+                                                const VariantCard = ({ variant }) => {
+                                                    const isSelected = form.package_variant_id == variant.id;
+                                                    const desc = getVariantDescription(variant);
+
+                                                    // Extra Hour: only for selected variant with max duration_hours AND has extra_hour_price
+                                                    const showExtraHour = isSelected &&
+                                                        maxDurationVariant?.id === variant.id &&
+                                                        Number(variant.extra_hour_price) > 0;
+
+                                                    // Extra Prints: only for selected variant with max print_limit (limited variants only)
+                                                    const showExtraPrints = isSelected &&
+                                                        maxPrintLimitVariant?.id === variant.id;
+
+                                                    return (
+                                                        <div
+                                                            key={variant.id}
+                                                            onClick={() => handleChooseVariant(variant.id)}
+                                                            className={`w-full p-6 md:p-8 rounded-3xl border-2 text-left transition-all duration-300 relative overflow-hidden cursor-pointer bg-white ${
+                                                                isSelected
+                                                                    ? 'border-primary shadow-[0_8px_32px_0_rgba(155,181,211,0.25)]'
+                                                                    : 'border-charcoal/10 hover:border-primary/50 hover:shadow-md'
+                                                            }`}
+                                                        >
+                                                            {isSelected && (
+                                                                <span className="absolute top-4 right-4 bg-primary text-white px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                                                                    <Check size={11} /> Terpilih
+                                                                </span>
+                                                            )}
+
+                                                            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
+                                                                <div className="flex-1">
+                                                                    <h5 className={`font-serif text-lg md:text-xl font-semibold leading-tight ${isSelected ? 'text-primary' : 'text-charcoal'}`}>
+                                                                        {variant.name}
+                                                                    </h5>
+
+                                                                    <div className="flex flex-wrap items-center gap-3 mt-2">
+                                                                        {!!variant.is_unlimited && (
+                                                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase tracking-wider bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                                                                <Check size={10} strokeWidth={3} /> Unlimited Cetak
+                                                                            </span>
+                                                                        )}
+                                                                        {!!variant.duration_hours && (
+                                                                            <span className="text-xs text-warm-grey bg-beige/50 px-2.5 py-0.5 rounded-md">
+                                                                                ⏱ {variant.duration_hours} Jam
+                                                                            </span>
+                                                                        )}
+                                                                        {!!variant.print_limit && (
+                                                                            <span className="text-xs text-warm-grey bg-beige/50 px-2.5 py-0.5 rounded-md">
+                                                                                🖼 {variant.print_limit} Lembar Cetakan
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="text-left md:text-right mt-1 md:mt-0 shrink-0">
+                                                                    <p className={`text-2xl font-serif font-semibold ${isSelected ? 'text-primary' : 'text-charcoal'}`}>
+                                                                        Rp {Number(variant.price).toLocaleString('id-ID')}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <p className="text-sm text-slate font-light leading-relaxed mb-4 italic">
+                                                                "{desc}"
+                                                            </p>
+
+                                                            {!variant.is_unlimited && (
+                                                                <p className="text-[11px] text-warm-grey/90 italic mb-4 leading-relaxed">
+                                                                    *Harga lebih mahal karena durasi penggunaan dapat berlangsung seharian sesuai kebutuhan event.
+                                                                </p>
+                                                            )}
+
+                                                            {/* Extra Hour Counter — only for max-duration selected variant */}
+                                                            {showExtraHour && (
+                                                                <div
+                                                                    className="mt-4 p-4 rounded-2xl bg-primary/5 border border-primary/20"
+                                                                    onClick={e => e.stopPropagation()}
+                                                                >
+                                                                    <p className="text-[11px] font-bold uppercase tracking-widest text-primary/70 mb-2">Tambah Durasi Acara</p>
+                                                                    <p className="text-xs text-warm-grey mb-3">
+                                                                        +Rp {Number(variant.extra_hour_price).toLocaleString('id-ID')} / jam tambahan
+                                                                    </p>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={e => { e.stopPropagation(); setForm(prev => ({ ...prev, extra_hours: Math.max(0, prev.extra_hours - 1) })); }}
+                                                                            className="w-9 h-9 rounded-full border-2 border-primary/30 bg-white text-primary font-bold text-lg flex items-center justify-center hover:bg-primary hover:text-white transition-colors"
+                                                                        >−</button>
+                                                                        <span className="text-lg font-serif font-semibold text-charcoal w-8 text-center">{form.extra_hours}</span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={e => { e.stopPropagation(); setForm(prev => ({ ...prev, extra_hours: prev.extra_hours + 1 })); }}
+                                                                            className="w-9 h-9 rounded-full border-2 border-primary/30 bg-white text-primary font-bold text-lg flex items-center justify-center hover:bg-primary hover:text-white transition-colors"
+                                                                        >+</button>
+                                                                        <span className="text-sm text-slate font-light">
+                                                                            {form.extra_hours > 0
+                                                                                ? `+${form.extra_hours} jam (+Rp ${(form.extra_hours * Number(variant.extra_hour_price)).toLocaleString('id-ID')})`
+                                                                                : 'Tidak ada tambahan durasi'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Extra Prints Counter — only for max-print-limit limited variant */}
+                                                            {showExtraPrints && (
+                                                                <div
+                                                                    className="mt-4 p-4 rounded-2xl bg-amber-50/60 border border-amber-200/60"
+                                                                    onClick={e => e.stopPropagation()}
+                                                                >
+                                                                    <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700/80 mb-2">Tambah Cetakan</p>
+                                                                    <p className="text-xs text-warm-grey mb-3">
+                                                                        +Rp 500.000 per 50 lembar cetak tambahan
+                                                                    </p>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={e => { e.stopPropagation(); setForm(prev => ({ ...prev, extra_prints: Math.max(0, prev.extra_prints - 50) })); }}
+                                                                            className="w-9 h-9 rounded-full border-2 border-amber-300 bg-white text-amber-700 font-bold text-lg flex items-center justify-center hover:bg-amber-100 transition-colors"
+                                                                        >−</button>
+                                                                        <span className="text-lg font-serif font-semibold text-charcoal w-12 text-center">{form.extra_prints}</span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={e => { e.stopPropagation(); setForm(prev => ({ ...prev, extra_prints: prev.extra_prints + 50 })); }}
+                                                                            className="w-9 h-9 rounded-full border-2 border-amber-300 bg-white text-amber-700 font-bold text-lg flex items-center justify-center hover:bg-amber-100 transition-colors"
+                                                                        >+</button>
+                                                                        <span className="text-sm text-slate font-light">
+                                                                            {form.extra_prints > 0
+                                                                                ? `+${form.extra_prints} lembar (+Rp ${((form.extra_prints / 50) * 500000).toLocaleString('id-ID')})`
+                                                                                : 'Tidak ada tambahan cetakan'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleChooseVariant(variant.id);
+                                                                }}
+                                                                className={`w-full mt-5 py-3 rounded-2xl font-bold text-sm transition-all duration-200 border-2 ${
+                                                                    isSelected
+                                                                        ? 'bg-primary text-white border-primary shadow-md shadow-primary/10'
+                                                                        : 'bg-white text-charcoal border-charcoal/15 hover:border-primary hover:text-primary'
+                                                                }`}
+                                                            >
+                                                                {isSelected ? 'Variant Terpilih ✓' : 'Pilih Variant ini'}
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                };
+
+                                                return (
+                                                    <div className="space-y-7">
+                                                        {unlimitedVariants.length > 0 && (
+                                                            <div>
+                                                                <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-600/80 mb-3 flex items-center gap-2">
+                                                                    <span className="w-4 h-0.5 bg-emerald-400 rounded inline-block" />
+                                                                    Unlimited Prints
+                                                                </p>
+                                                                <div className="flex flex-col gap-4">
+                                                                    {unlimitedVariants.map(v => <VariantCard key={v.id} variant={v} />)}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {limitedVariants.length > 0 && (
+                                                            <div>
+                                                                <p className="text-[11px] font-bold uppercase tracking-widest text-charcoal/50 mb-3 flex items-center gap-2">
+                                                                    <span className="w-4 h-0.5 bg-charcoal/30 rounded inline-block" />
+                                                                    Limited Prints
+                                                                </p>
+                                                                <div className="flex flex-col gap-4">
+                                                                    {limitedVariants.map(v => <VariantCard key={v.id} variant={v} />)}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {unlimitedVariants.length === 0 && limitedVariants.length === 0 && (
+                                                            <p className="text-sm text-slate/60">Belum ada varian tersedia untuk paket ini.</p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {/* Price summary shown after variant is selected */}
+                                {selectedVariant && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 12 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                        className="mt-2 px-1"
+                                    >
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-primary/5 rounded-2xl px-6 py-4 border border-primary/15">
+                                            <div>
+                                                <p className="text-xs text-warm-grey">Estimasi Harga Saat Ini</p>
+                                                <p className="text-xl font-serif font-bold text-charcoal mt-0.5">
+                                                    Rp {calculateTotalPrice().toLocaleString('id-ID')}
+                                                </p>
+                                            </div>
+                                            <p className="text-xs text-warm-grey font-light">
+                                                Klik <strong>Lanjut</strong> untuk memilih template &amp; layanan tambahan.
+                                            </p>
                                         </div>
                                     </motion.div>
                                 )}
@@ -500,7 +1119,7 @@ export default function Booking({ initialDate = null }) {
                                 className="space-y-8"
                             >
                                 <h3 className="type-shout !text-2xl md:!text-3xl mb-2">Frame & Addons</h3>
-                                
+
                                 <div>
                                     <h4 className="font-serif text-md text-charcoal mb-4">A. Frame yang Tersedia di MemoForia</h4>
                                     <p className="text-xs text-warm-grey mb-4">Frame bersifat referensi. Anda tidak wajib memilih frame. Jika ingin menggunakan frame custom, pilih opsi di bawah.</p>
@@ -578,25 +1197,60 @@ export default function Booking({ initialDate = null }) {
                                         </div>
                                     )}
                                     <h4 className="font-serif text-md text-charcoal mb-4">C. Tambahkan Addons Acara (Opsional):</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {addonsList.map(addon => {
-                                            const qty = selectedAddons[addon.id] || 0;
+                                    {selectedPackage ? (
+                                        (() => {
+                                            const filteredAddons = getAdditionalServicesFromAddons(selectedPackage);
+                                            if (filteredAddons.length === 0) {
+                                                return <p className="text-sm text-warm-grey">Tidak ada layanan tambahan tersedia untuk paket ini.</p>;
+                                            }
                                             return (
-                                                <div key={addon.id} className="p-4 rounded-xl border border-beige bg-off-white/40 flex items-center justify-between">
-                                                    <div className="max-w-[70%]">
-                                                        <h5 className="font-medium text-sm text-charcoal">{addon.name}</h5>
-                                                        <p className="text-xs text-slate font-light mt-1 leading-relaxed">{addon.description}</p>
-                                                        <p className="text-sm font-serif text-primary mt-1">Rp {Number(addon.price).toLocaleString('id-ID')}</p>
-                                                    </div>
-                                                    <div className="flex items-center space-x-2">
-                                                        <button onClick={() => handleAddonChange(addon.id, 'decrement')} className="w-8 h-8 rounded-full border border-beige hover:bg-beige text-charcoal font-bold flex items-center justify-center">-</button>
-                                                        <span className="font-semibold text-sm w-4 text-center">{qty}</span>
-                                                        <button onClick={() => handleAddonChange(addon.id, 'increment')} className="w-8 h-8 rounded-full border border-beige hover:bg-beige text-charcoal font-bold flex items-center justify-center">+</button>
-                                                    </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                    {filteredAddons.map((s) => {
+                                                        const isAddonChecked = (selectedAddons[s.id] || 0) > 0;
+                                                        return (
+                                                            <label
+                                                                key={s.id}
+                                                                htmlFor={`addon-step2-${s.id}`}
+                                                                className={`flex items-start justify-between gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all select-none ${
+                                                                    isAddonChecked
+                                                                        ? 'border-primary bg-primary/5 shadow-sm'
+                                                                        : 'border-beige bg-white hover:border-primary/40 hover:bg-beige/30'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-start gap-3 flex-1 min-w-0">
+                                                                    <div className={`w-5 h-5 shrink-0 rounded-md border-2 flex items-center justify-center transition-all mt-0.5 ${
+                                                                        isAddonChecked ? 'bg-primary border-primary' : 'border-beige bg-white'
+                                                                    }`}>
+                                                                        {isAddonChecked && <Check size={12} className="text-white" strokeWidth={3} />}
+                                                                    </div>
+                                                                    <input
+                                                                        id={`addon-step2-${s.id}`}
+                                                                        type="checkbox"
+                                                                        className="sr-only"
+                                                                        checked={isAddonChecked}
+                                                                        onChange={(e) => handleAddonChange(s.id, e.target.checked ? 'increment' : 'decrement')}
+                                                                    />
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-sm text-charcoal font-semibold leading-snug">{s.name}</span>
+                                                                        <span className="text-xs text-warm-grey mt-1 font-light leading-normal">{s.description || 'Layanan tambahan untuk melengkapi event Anda.'}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right shrink-0 mt-0.5">
+                                                                    <span className={`text-sm font-serif font-semibold ${
+                                                                        isAddonChecked ? 'text-primary' : 'text-charcoal/80'
+                                                                    }`}>
+                                                                        +Rp {Number(s.price).toLocaleString('id-ID')}
+                                                                    </span>
+                                                                </div>
+                                                            </label>
+                                                        );
+                                                    })}
                                                 </div>
                                             );
-                                        })}
-                                    </div>
+                                        })()
+                                    ) : (
+                                        <p className="text-sm text-warm-grey italic">Pilih paket terlebih dahulu di langkah sebelumnya untuk melihat layanan tambahan.</p>
+                                    )}
                                 </div>
                             </motion.div>
                         )}
@@ -613,7 +1267,7 @@ export default function Booking({ initialDate = null }) {
                                 <h3 className="type-shout !text-2xl md:!text-3xl mb-8 flex items-center gap-3">
                                     <User size={28} className="text-primary shrink-0" /> Data Acara
                                 </h3>
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-6">
                                         <h4 className="font-serif text-sm text-primary uppercase tracking-wider border-b border-beige pb-2">Kontak Pelanggan</h4>
@@ -697,6 +1351,27 @@ export default function Booking({ initialDate = null }) {
                                         <span className="text-slate font-light">Paket Layanan</span>
                                         <span className="font-semibold text-charcoal">{selectedPackage?.name} ({selectedVariant?.name})</span>
                                     </div>
+
+                                    {/* Extra Hour row */}
+                                    {isMaxDurationSelected && form.extra_hours > 0 && (
+                                        <div className="flex justify-between border-b border-primary-100/50 pb-2.5 text-sm">
+                                            <span className="text-slate font-light">Tambah Durasi (+{form.extra_hours} jam)</span>
+                                            <span className="font-semibold text-charcoal">
+                                                +Rp {(form.extra_hours * Number(selectedVariant?.extra_hour_price || 0)).toLocaleString('id-ID')}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Extra Prints row */}
+                                    {isMaxPrintLimitSelected && form.extra_prints > 0 && (
+                                        <div className="flex justify-between border-b border-primary-100/50 pb-2.5 text-sm">
+                                            <span className="text-slate font-light">Tambah Cetakan (+{form.extra_prints} lembar)</span>
+                                            <span className="font-semibold text-charcoal">
+                                                +Rp {((form.extra_prints / 50) * 500000).toLocaleString('id-ID')}
+                                            </span>
+                                        </div>
+                                    )}
+
                                     <div className="flex justify-between border-b border-primary-100/50 pb-2.5 text-sm gap-3">
                                         <span className="text-slate font-light shrink-0">Frame Layout</span>
                                         <div className="flex items-center gap-2 justify-end">

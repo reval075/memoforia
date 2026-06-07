@@ -186,14 +186,20 @@ export default function TrackBookingDetail() {
     const statusMessage = getStatusMessage(booking);
     const addons = booking.addons || [];
     const payments = booking.payments || [];
+    const extraHours = Number(booking.extra_hours || 0);
+    const extraPrints = Number(booking.extra_prints || 0);
+    const extraHourPrice = Number(booking.package_variant?.extra_hour_price || 0);
+    const extraHourCost = extraHours > 0 && extraHourPrice > 0 ? extraHours * extraHourPrice : 0;
+    const extraPrintCost = extraPrints > 0 ? (extraPrints / 50) * 500000 : 0;
 
     const addonsTotal = addons.reduce(
         (sum, addon) => sum + Number(addon.price || 0) * Number(addon.quantity || 0),
         0
     );
+    // packageSubtotal = total - addons - extras; fallback to variant price
     const packageSubtotal = booking.package_variant?.price
         ? Number(booking.package_variant.price)
-        : Math.max(Number(booking.total_price || 0) - addonsTotal, 0);
+        : Math.max(Number(booking.total_price || 0) - addonsTotal - extraHourCost - extraPrintCost, 0);
 
     const hasPendingManualPayment = payments.some((p) => p.status === 'pending' && p.payment_source === 'manual');
 
@@ -324,6 +330,22 @@ export default function TrackBookingDetail() {
                                     value={`${booking.package_variant.print_limit} Lembar`}
                                 />
                             ) : null}
+
+                            {/* Extra Durasi */}
+                            {extraHours > 0 && (
+                                <InfoRow
+                                    label={`Tambah Durasi (+${extraHours} jam)`}
+                                    value={extraHourCost > 0 ? formatCurrency(extraHourCost) : `+${extraHours} jam`}
+                                />
+                            )}
+
+                            {/* Extra Cetakan */}
+                            {extraPrints > 0 && (
+                                <InfoRow
+                                    label={`Tambah Cetakan (+${extraPrints} lembar)`}
+                                    value={formatCurrency(extraPrintCost)}
+                                />
+                            )}
                             <InfoRow
                                 label="Template Frame"
                                 value={
@@ -389,6 +411,18 @@ export default function TrackBookingDetail() {
                         <RevealItem>
                         <SectionCard title="Ringkasan Pembayaran" icon={CreditCard}>
                             <InfoRow label="Subtotal Paket" value={formatCurrency(packageSubtotal)} />
+                            {extraHourCost > 0 && (
+                                <InfoRow
+                                    label={`Tambah Durasi (+${extraHours} jam)`}
+                                    value={formatCurrency(extraHourCost)}
+                                />
+                            )}
+                            {extraPrintCost > 0 && (
+                                <InfoRow
+                                    label={`Tambah Cetakan (+${extraPrints} lembar)`}
+                                    value={formatCurrency(extraPrintCost)}
+                                />
+                            )}
                             <InfoRow label="Total Addons" value={formatCurrency(addonsTotal)} />
                             <InfoRow
                                 label="Total Pembayaran"
