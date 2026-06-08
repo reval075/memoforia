@@ -83,6 +83,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/admin/dashboard', function () {
         return Inertia::render('Dashboard', [
             'initialRentals' => \App\Models\RentalRequest::with(['items.equipment', 'payments'])
+                ->where('status', 'pending_approval')
                 ->latest()
                 ->get(),
             'pendingRentalCount' => \App\Models\RentalRequest::where('status', 'pending_approval')->count(),

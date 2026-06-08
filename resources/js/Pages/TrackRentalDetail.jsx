@@ -93,7 +93,37 @@ export default function TrackRentalDetail() {
                 router.visit('/track-booking');
                 return;
             }
+
+            // Tampilkan data sessionStorage dulu supaya halaman langsung terlihat
             setSession(parsed);
+
+            // Auto-refresh: fetch data terbaru dari API secara silent pada saat mount.
+            // Ini krusial supaya status 'waiting_dp' (setelah admin approve) langsung
+            // terbaca meskipun sessionStorage masih menyimpan status lama.
+            axios
+                .post('/api/rental-requests/track', {
+                    rental_code: parsed.rental_code,
+                    contact: parsed.contact,
+                })
+                .then((res) => {
+                    if (res.data?.success && res.data?.data) {
+                        const updated = {
+                            rental_code: parsed.rental_code,
+                            contact: parsed.contact,
+                            data: res.data.data,
+                            fetchedAt: Date.now(),
+                        };
+                        sessionStorage.setItem(
+                            RENTAL_TRACKING_SESSION_KEY,
+                            JSON.stringify(updated)
+                        );
+                        setSession(updated);
+                    }
+                })
+                .catch(() => {
+                    // Silent fail — halaman tetap menampilkan data dari sessionStorage
+                    console.warn('[TrackRentalDetail] Auto-refresh gagal, menggunakan data cache.');
+                });
         } catch {
             sessionStorage.removeItem(RENTAL_TRACKING_SESSION_KEY);
             router.visit('/track-booking');
@@ -199,6 +229,18 @@ export default function TrackRentalDetail() {
         !clientDpExpired &&
         !hasPendingManualPayment &&
         !['expired', 'cancelled', 'rejected', 'completed'].includes(rental.status);
+
+    // ── Debug logging (hapus saat production) ────────────────────────
+    console.log('[TrackRentalDetail] Rental data:', rental);
+    console.log('[TrackRentalDetail] canShowMidtransSection:', canShowMidtransSection, {
+        is_dp_expired: rental.is_dp_expired,
+        clientDpExpired,
+        status: rental.status,
+        remaining_amount: rental.remaining_amount,
+        hasPendingManualPayment,
+    });
+    console.log('[TrackRentalDetail] hasPendingManualPayment:', hasPendingManualPayment);
+    // ─────────────────────────────────────────────────────────────────
 
     return (
         <GuestLayout>
