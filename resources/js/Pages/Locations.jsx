@@ -1,5 +1,5 @@
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 import { MapPin, Phone, Clock, Mail, MessageSquare, ArrowRight, Sparkles, Navigation } from 'lucide-react';
 import ChunkyButton from '@/components/art/ChunkyButton';
@@ -285,41 +285,6 @@ export default function Locations({ locations = [] }) {
                 </motion.div>
             </section>
 
-            {/* ═══ SECTION 5: PHOTO BOOTHS AVAILABLE ═══ */}
-            {branch.booths && branch.booths.length > 0 && (
-                <section className="px-6 max-w-6xl mx-auto mb-20 md:mb-24">
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        whileInView={{ opacity: 1 }}
-                        viewport={{ once: true, margin: '-40px' }}
-                    >
-                        <h3 className="text-3xl md:text-4xl font-serif text-charcoal mb-8 text-center">
-                            Photobooth Tersedia
-                        </h3>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                            {branch.booths.map((booth, i) => (
-                                <motion.div
-                                    key={booth.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    whileInView={{ opacity: 1, y: 0 }}
-                                    viewport={{ once: true }}
-                                    transition={{ delay: i * 0.05 }}
-                                    className="p-4 bg-primary-50 border-2 border-primary-100 rounded-2xl text-center hover:border-primary transition-colors"
-                                >
-                                    <p className="text-sm font-semibold text-charcoal">{booth.name}</p>
-                                    {booth.status && (
-                                        <p className="text-xs text-warm-grey mt-1">
-                                            {booth.status === 'active' ? '✓ Tersedia' : 'Maintenance'}
-                                        </p>
-                                    )}
-                                </motion.div>
-                            ))}
-                        </div>
-                    </motion.div>
-                </section>
-            )}
-
             {/* ═══ SECTION 6: CTA ═══ */}
             <section className="px-6 py-20 md:py-28 bg-gradient-to-br from-primary/90 to-primary-dark text-white">
                 <motion.div
@@ -332,9 +297,14 @@ export default function Locations({ locations = [] }) {
                     <p className="text-white/80 text-base md:text-lg font-light mb-10">
                         Booking sekarang dan dapatkan pengalaman photobooth terbaik bersama MemoForia.
                     </p>
-                    <ChunkyButton href="/booking-session" className="bg-white text-primary hover:bg-off-white">
-                        Mulai Booking Sekarang <ArrowRight size={20} />
-                    </ChunkyButton>
+                    <div className="flex justify-center">
+                        <Link
+                            href="/booking"
+                            className="inline-flex items-center justify-center gap-2 bg-white text-[#243B53] hover:bg-[#243B53] hover:text-white border-2 border-transparent hover:border-white/20 px-8 py-3.5 rounded-full text-sm uppercase tracking-widest font-bold transition-all duration-300 shadow-md"
+                        >
+                            BOOK SESSION <ArrowRight size={16} />
+                        </Link>
+                    </div>
                 </motion.div>
             </section>
         </GuestLayout>
