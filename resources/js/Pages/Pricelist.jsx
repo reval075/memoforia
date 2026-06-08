@@ -277,32 +277,47 @@ export default function Pricelist({ packages = [], addons = [] }) {
                 </div>
 
                 {/* Addons */}
-                {addons.length > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="mb-20 pt-8 border-t border-beige"
-                    >
-                        <h2 className="text-2xl font-serif text-charcoal mb-8 text-center font-bold">Addons Opsional</h2>
-                        <div className="bg-white rounded-3xl border border-primary-50 divide-y divide-beige overflow-hidden shadow-sm">
-                            {addons.map((addon) => (
-                                <div key={addon.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-5 md:px-8 hover:bg-primary-50/10 transition-colors">
-                                    <div className="flex items-start gap-3">
-                                        <Check size={14} className="text-primary mt-1 shrink-0" />
-                                        <div>
-                                            <p className="font-medium text-charcoal text-sm">{addon.name}</p>
-                                            <p className="text-xs text-slate font-light mt-0.5">{addon.description}</p>
-                                        </div>
-                                    </div>
-                                    <p className="font-serif text-sm md:text-base font-bold text-primary-dark sm:pl-4 whitespace-nowrap">
-                                        {formatIdr(addon.price)}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    className="mb-20 pt-8 border-t border-beige"
+                >
+                    <h2 className="text-2xl font-serif text-charcoal mb-8 text-center font-bold">Addons Opsional</h2>
+                    <div className="bg-white rounded-3xl border border-primary-50 divide-y divide-beige overflow-hidden shadow-sm">
+                        {/* 1. Keychain 10 pcs */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-5 md:px-8 hover:bg-primary-50/10 transition-colors">
+                            <div className="flex items-start gap-3">
+                                <Check size={14} className="text-primary mt-1 shrink-0" />
+                                <div>
+                                    <p className="font-medium text-charcoal text-sm">Keychain 10 pcs</p>
+                                    <p className="text-xs text-slate font-light mt-0.5">
+                                        Gantungan kunci akrilik custom sebanyak 10 buah, cocok untuk souvenir tamu event.
                                     </p>
                                 </div>
-                            ))}
+                            </div>
+                            <p className="font-serif text-sm md:text-base font-bold text-primary-dark sm:pl-4 whitespace-nowrap">
+                                Rp 50.000
+                            </p>
                         </div>
-                    </motion.div>
-                )}
+
+                        {/* 2. Custom Background */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-5 md:px-8 hover:bg-primary-50/10 transition-colors">
+                            <div className="flex items-start gap-3">
+                                <Check size={14} className="text-primary mt-1 shrink-0" />
+                                <div>
+                                    <p className="font-medium text-charcoal text-sm">Custom Background</p>
+                                    <p className="text-xs text-slate font-light mt-0.5">
+                                        Latar belakang custom digital/fisik yang disesuaikan dengan tema acara.
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="font-serif text-sm md:text-base font-bold text-primary-dark sm:pl-4 whitespace-nowrap">
+                                Rp 400.000
+                            </p>
+                        </div>
+                    </div>
+                </motion.div>
 
                 {/* CTA Booking */}
                 <motion.div
