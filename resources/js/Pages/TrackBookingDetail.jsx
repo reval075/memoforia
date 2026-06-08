@@ -13,6 +13,7 @@ import {
     AlertCircle,
     Clock,
     User,
+    FileText,
 } from 'lucide-react';
 import { TRACKING_SESSION_KEY } from '../constants/tracking';
 import PaymentProofUpload from '../components/PaymentProofUpload';
@@ -505,6 +506,31 @@ export default function TrackBookingDetail() {
                             </div>
                         </SectionCard>
                         </RevealItem>
+
+                        {booking.documents && booking.documents.length > 0 && (
+                            <RevealItem>
+                                <SectionCard title="Dokumen Booking" icon={FileText}>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {booking.documents.map(doc => (
+                                            <div key={doc.id} className="bg-off-white border border-beige/60 rounded-xl p-4 flex flex-col hover:border-primary transition-colors">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div>
+                                                        <span className="font-bold text-primary uppercase text-sm block">{doc.document_type.replace('_', ' ')}</span>
+                                                        <span className="text-xs text-warm-grey font-mono mt-1 block">{doc.document_number}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="text-[11px] text-warm-grey mb-4">
+                                                    Dibuat: {new Date(doc.generated_at).toLocaleString('id-ID')}
+                                                </div>
+                                                <a href={`/api/bookings/${booking.booking_code}/documents/download-latest/${doc.document_type}`} target="_blank" rel="noopener noreferrer" className="mt-auto bg-white border border-primary text-primary hover:bg-primary hover:text-white py-2 text-center rounded-lg text-xs font-semibold transition-colors">
+                                                    Unduh Dokumen
+                                                </a>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </SectionCard>
+                            </RevealItem>
+                        )}
 
                         {booking.notes && (
                             <RevealItem>

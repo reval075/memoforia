@@ -210,6 +210,17 @@ export default function Dashboard() {
         }
     };
 
+    const handleRegenerateDocument = (bookingCode, type) => {
+        if (confirm(`Regenerate dokumen ${type.replace('_', ' ')}?`)) {
+            axios.post(`/api/bookings/${bookingCode}/documents/regenerate`, { type })
+                .then(res => {
+                    showMsg(res.data.message);
+                    loadBookings();
+                })
+                .catch(err => showMsg(err.response?.data?.message || 'Gagal me-regenerate dokumen.', 'error'));
+        }
+    };
+
     // Rental Actions
     const handleRentalApprove = (id) => {
         axios.post(`/admin/api/rentals/${id}/approve`)
@@ -686,6 +697,36 @@ export default function Dashboard() {
                                                                 {pay.status === 'pending' && pay.payment_source === 'midtrans' && (
                                                                     <span className="text-[10px] text-warm-grey uppercase">Menunggu gateway</span>
                                                                 )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Document Management */}
+                                            {booking.documents?.length > 0 && (
+                                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+                                                    <strong className="block text-xs uppercase tracking-wider text-slate-700 mb-3">Dokumen Booking:</strong>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        {booking.documents.map(doc => (
+                                                            <div key={doc.id} className="flex flex-col border border-slate-200 rounded-lg p-3 bg-white hover:border-primary transition-colors">
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <div>
+                                                                        <span className="text-xs font-bold text-primary block uppercase">{doc.document_type.replace('_', ' ')}</span>
+                                                                        <span className="text-[10px] text-warm-grey">{doc.document_number}</span>
+                                                                    </div>
+                                                                    <span className="text-[10px] text-warm-grey">{new Date(doc.generated_at).toLocaleString('id-ID')}</span>
+                                                                </div>
+                                                                <div className="flex space-x-2 mt-auto pt-2 border-t border-slate-100">
+                                                                    <a href={`/api/documents/${doc.id}/download`} target="_blank" rel="noopener noreferrer" 
+                                                                       className="flex-1 text-center bg-primary hover:bg-primary-dark text-white py-1.5 rounded text-[10px] font-semibold transition-colors">
+                                                                        Download
+                                                                    </a>
+                                                                    <button onClick={() => handleRegenerateDocument(booking.booking_code, doc.document_type)}
+                                                                       className="flex-1 text-center bg-white border border-primary text-primary hover:bg-slate-50 py-1.5 rounded text-[10px] font-semibold transition-colors">
+                                                                        Regenerate
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         ))}
                                                     </div>

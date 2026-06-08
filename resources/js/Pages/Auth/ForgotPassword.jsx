@@ -19,12 +19,12 @@ export default function ForgotPassword() {
             <div className="w-full max-w-[420px] bg-white p-10 rounded-3xl shadow-xl shadow-primary/5 border border-primary-50">
                 {/* Brand Header */}
                 <div className="text-center mb-8">
-                    <img 
-                        src="/images/logo.png" 
-                        alt="MemForia Logo" 
-                        className="h-16 w-16 rounded-full mx-auto mb-4 object-cover shadow-md shadow-primary/10" 
+                    <img
+                        src="/images/logo.png"
+                        alt="MemoForia Logo"
+                        className="h-16 w-16 rounded-full mx-auto mb-4 object-cover shadow-md shadow-primary/10"
                     />
-                    <h1 className="font-serif text-3xl text-charcoal tracking-wide">MemForia</h1>
+                    <h1 className="font-serif text-3xl text-charcoal tracking-wide">MemoForia</h1>
                     <p className="text-sm text-warm-grey mt-1">Lupa Kata Sandi Admin</p>
                 </div>
 
@@ -49,7 +49,7 @@ export default function ForgotPassword() {
                                 onChange={(e) => form.setData('email', e.target.value)}
                                 type="email"
                                 className={`w-full pl-11 pr-5 py-3 rounded-xl border-2 bg-off-white text-sm focus:outline-none transition-colors duration-300 ${form.errors.email ? 'border-red-300 focus:border-red-500' : 'border-beige focus:border-primary'}`}
-                                placeholder="admin@memforia.com"
+                                placeholder="admin@memoforia.com"
                                 required
                             />
                             <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-warm-grey" />

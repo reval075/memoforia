@@ -185,6 +185,11 @@ class Booking extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function documents()
+    {
+        return $this->hasMany(BookingDocument::class);
+    }
+
     /**
      * Calculate total amount already paid (verified payments only).
      *
