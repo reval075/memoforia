@@ -171,7 +171,7 @@ class BookingController extends Controller
      */
     public function adminIndex(Request $request)
     {
-        $query = Booking::with(['servicePackage', 'packageVariant', 'selectedTemplate', 'addons', 'payments']);
+        $query = Booking::with(['servicePackage', 'packageVariant', 'selectedTemplate', 'addons', 'payments', 'documents']);
 
         // Filter by status if specified and not "all"/"semua"/empty
         $status = $request->input('status', '');
@@ -288,6 +288,7 @@ class BookingController extends Controller
             'selectedTemplate',
             'addons',
             'payments' => fn ($query) => $query->latest(),
+            'documents' => fn ($query) => $query->latest(),
         ])
             ->where('booking_code', $validated['booking_code'])
             ->first();
@@ -310,6 +311,7 @@ class BookingController extends Controller
                 'selectedTemplate',
                 'addons',
                 'payments' => fn ($query) => $query->latest(),
+                'documents' => fn ($query) => $query->latest(),
             ]);
         }
 
@@ -811,7 +813,7 @@ class BookingController extends Controller
                 'name' => $booking->selectedTemplate->name,
                 'size' => $booking->selectedTemplate->size,
             ] : null,
-            'addons' => $booking->addons->map(fn ($addon) => [
+                            'addons' => $booking->addons->map(fn ($addon) => [
                 'id' => $addon->id,
                 'name' => $addon->name,
                 'quantity' => $addon->pivot->quantity,
@@ -828,6 +830,12 @@ class BookingController extends Controller
                 'created_at'     => $payment->created_at,
                 'verified_at'    => $payment->verified_at,
             ])->values(),
+            'documents' => $booking->documents ? $booking->documents->map(fn ($doc) => [
+                'id' => $doc->id,
+                'document_type' => $doc->document_type,
+                'document_number' => $doc->document_number,
+                'generated_at' => $doc->generated_at,
+            ])->values() : [],
             'extra_hours' => $booking->extra_hours,
             'extra_prints' => $booking->extra_prints,
         ];

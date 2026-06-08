@@ -29,6 +29,12 @@ Route::post('/bookings/track', [BookingController::class, 'track'])
 Route::post('/bookings/payment-proof', [BookingController::class, 'uploadProof']); // Guest uploads payment proof (disabled, kept for backward compat)
 Route::get('/bookings/{bookingCode}/payment-tracking', [PaymentController::class, 'getBookingPaymentTracking']);
 
+// Documents
+Route::get('/bookings/{bookingCode}/documents', [\App\Http\Controllers\BookingDocumentController::class, 'index']);
+Route::get('/bookings/{bookingCode}/documents/download-latest/{type}', [\App\Http\Controllers\BookingDocumentController::class, 'downloadLatest']);
+Route::get('/documents/{id}/download', [\App\Http\Controllers\BookingDocumentController::class, 'download']);
+Route::post('/bookings/{bookingCode}/documents/regenerate', [\App\Http\Controllers\BookingDocumentController::class, 'regenerate']);
+
 Route::get('/addons', function () {
     return response()->json(['data' => \App\Models\Addon::where('is_active', true)->orderBy('display_order')->get()]);
 });
