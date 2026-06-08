@@ -79,6 +79,7 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware(['auth', 'admin'])->group(function () {
+    Route::redirect('/admin', '/admin/dashboard');
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
     Route::get('/admin/dashboard', function () {
         return Inertia::render('Dashboard', [
@@ -210,4 +211,29 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/admin/api/unavailable-dates', [\App\Http\Controllers\AvailabilityController::class, 'adminUnavailableIndex']);
     Route::post('/admin/api/unavailable-dates', [\App\Http\Controllers\AvailabilityController::class, 'storeUnavailableDate']);
     Route::delete('/admin/api/unavailable-dates/{date}', [\App\Http\Controllers\AvailabilityController::class, 'deleteUnavailableDate']);
+
+    // Admin Dashboard Stats Summary
+    Route::get('/admin/api/stats', function () {
+        $startOfMonth = now()->startOfMonth();
+        $endOfMonth   = now()->endOfMonth();
+
+        $pendingPayments = \App\Models\Payment::where('status', 'pending')
+            ->where(function ($q) {
+                $q->whereNotNull('proof_image')
+                  ->orWhere('payment_source', '!=', 'midtrans');
+            })
+            ->count();
+
+        $monthlyRevenue = \App\Models\Payment::where('status', 'verified')
+            ->whereBetween('verified_at', [$startOfMonth, $endOfMonth])
+            ->sum('amount');
+
+        return response()->json([
+            'pending_bookings'  => \App\Models\Booking::where('status', 'pending_approval')->count(),
+            'active_bookings'   => \App\Models\Booking::where('status', 'confirmed')->count(),
+            'pending_rentals'   => \App\Models\RentalRequest::where('status', 'pending_approval')->count(),
+            'pending_payments'  => $pendingPayments,
+            'monthly_revenue'   => (int) $monthlyRevenue,
+        ]);
+    });
 });

@@ -1,1345 +1,557 @@
 import { useForm, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Calendar, Package, Check, X, Trash2, Edit2, Plus, LogOut, Loader2, ListCollapse, Image, Sparkles } from 'lucide-react';
+import { Calendar, Package, Check, X, Trash2, Edit2, Plus, LogOut, Loader2, Image, CreditCard, Eye, TrendingUp, Settings, RefreshCw, FileText, User, Sparkles, Clock, AlertCircle } from 'lucide-react';
+
+function StatusBadge({ status }) {
+    const cfg = {
+        pending_approval: ['Pending Approval', 'bg-amber-50 text-amber-700 ring-amber-200'],
+        waiting_dp: ['Waiting DP', 'bg-sky-50 text-sky-700 ring-sky-200'],
+        confirmed: ['Confirmed', 'bg-emerald-50 text-emerald-700 ring-emerald-200'],
+        completed: ['Completed', 'bg-slate-100 text-slate-600 ring-slate-200'],
+        cancelled: ['Cancelled', 'bg-red-50 text-red-600 ring-red-200'],
+        expired: ['Expired', 'bg-orange-50 text-orange-600 ring-orange-200'],
+        rejected: ['Rejected', 'bg-red-100 text-red-700 ring-red-200']
+    };
+    const [label, cls] = cfg[status] || [status, 'bg-gray-100 text-gray-600 ring-gray-200'];
+    return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ring-1 ring-inset ${cls}`}>{label}</span>;
+}
+
+function PaymentBadge({ status }) {
+    const cfg = {
+        unpaid: ['Belum Bayar', 'bg-gray-100 text-gray-500 ring-gray-200'],
+        partial: ['DP Terbayar', 'bg-amber-50 text-amber-600 ring-amber-200'],
+        paid: ['Lunas', 'bg-emerald-50 text-emerald-700 ring-emerald-200']
+    };
+    const [label, cls] = cfg[status] || [status || '-', 'bg-gray-100 text-gray-500 ring-gray-200'];
+    return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ring-1 ring-inset ${cls}`}>{label}</span>;
+}
+
+function SummaryCard({ label, value, sub, highlight, icon: Icon, loading }) {
+    return (
+        <div className={`group flex-1 min-w-[150px] rounded-2xl px-5 py-4 border ${highlight ? 'bg-primary border-primary/40 shadow-sm' : 'bg-white border-beige'}`}>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className={`text-[11px] font-semibold uppercase tracking-wider mb-1 ${highlight ? 'text-white/70' : 'text-warm-grey'}`}>{label}</p>
+                    {loading ? <div className="h-7 w-16 bg-beige rounded-lg animate-pulse" /> : <p className={`text-2xl font-bold leading-none ${highlight ? 'text-white' : 'text-charcoal'}`}>{value}</p>}
+                    {sub && <p className={`text-xs mt-1 truncate ${highlight ? 'text-white/60' : 'text-warm-grey'}`}>{sub}</p>}
+                </div>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${highlight ? 'bg-white/20 text-white' : 'bg-beige text-slate'}`}><Icon size={16} /></div>
+            </div>
+        </div>
+    );
+}
+
+function RejectModal({ open, onConfirm, onClose }) {
+    const [reason, setReason] = useState('');
+    useEffect(() => { if (!open) setReason(''); }, [open]);
+    if (!open) return null;
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                <h3 className="font-serif text-lg text-charcoal mb-1">Alasan Penolakan</h3>
+                <p className="text-xs text-warm-grey mb-4">Catatan ini akan tersimpan dan dikirimkan kepada customer.</p>
+                <textarea rows={4} autoFocus value={reason} onChange={e => setReason(e.target.value)} placeholder="Tuliskan alasan penolakan..." className="w-full px-4 py-3 border border-beige rounded-xl text-sm focus:outline-none focus:border-primary resize-none" />
+                <div className="flex justify-end gap-3 mt-4">
+                    <button onClick={onClose} className="px-5 py-2 rounded-xl text-sm font-semibold text-slate bg-beige hover:bg-gray-200 transition-colors">Batal</button>
+                    <button onClick={() => onConfirm(reason)} className="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors">Tolak</button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function Dashboard() {
     const { auth, initialRentals = [], pendingRentalCount = 0 } = usePage().props;
     const form = useForm();
-
     const [activeTab, setActiveTab] = useState('bookings');
-    const [configSubTab, setConfigSubTab] = useState('packages'); // packages, variants, addons, templates
-
-    // Data lists
+    const [configSubTab, setConfigSubTab] = useState('packages');
+    
+    // Data
     const [bookings, setBookings] = useState([]);
     const [rentals, setRentals] = useState(Array.isArray(initialRentals) ? initialRentals : []);
     const [packages, setPackages] = useState([]);
     const [addons, setAddons] = useState([]);
     const [templates, setTemplates] = useState([]);
     const [blockedDates, setBlockedDates] = useState([]);
-
+    const [stats, setStats] = useState({ pending_bookings: 0, active_bookings: 0, pending_rentals: 0, pending_payments: 0, monthly_revenue: 0 });
+    
+    // UI State
     const [loading, setLoading] = useState(false);
+    const [statsLoading, setStatsLoading] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [selectedType, setSelectedType] = useState(null); // 'booking' | 'rental'
+    const [rejectModal, setRejectModal] = useState({ open: false, id: null, type: null });
+    const [filter, setFilter] = useState('');
 
-    // Block Date State
+    // Forms
     const [blockForm, setBlockForm] = useState({ date: '', reason: '' });
-
-    // Configuration CRUD States
-    const [packageForm, setPackageForm] = useState({
-        id: null,
-        name: '',
-        category: 'soft_file',
-        description: '',
-        is_active: true,
-        display_order: 0,
-        includes_softfile: false,
-        includes_prints: false,
-        includes_qr_code: false,
-        includes_gif: false,
-        includes_custom_template: false,
-        includes_supporting_crew: false,
-        includes_tiket_antrian: false,
-    });
-    const [isEditingPackage, setIsEditingPackage] = useState(false);
-
+    const [packageForm, setPackageForm] = useState({ id: null, name: '', category: 'soft_file', description: '', is_active: true, display_order: 0, includes_softfile: false, includes_prints: false, includes_qr_code: false, includes_gif: false, includes_custom_template: false, includes_supporting_crew: false, includes_tiket_antrian: false });
     const [variantForm, setVariantForm] = useState({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', is_unlimited: false });
-    const [isEditingVariant, setIsEditingVariant] = useState(false);
-
     const [addonForm, setAddonForm] = useState({ id: null, name: '', price: '', description: '', is_active: true, display_order: 0 });
-    const [isEditingAddon, setIsEditingAddon] = useState(false);
+    const [templateForm, setTemplateForm] = useState({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', description: '', is_active: true, display_order: 0 });
 
-    const [templateForm, setTemplateForm] = useState({
-        id: null,
-        name: '',
-        size: '4R',
-        frame_type: '',
-        layout_type: '',
-        description: '',
-        is_active: true,
-        display_order: 0,
-    });
-    const [isEditingTemplate, setIsEditingTemplate] = useState(false);
+    const showMsg = (text, type = 'success') => { setMessage({ text, type }); setTimeout(() => setMessage({ text: '', type: '' }), 5000); };
+    
+    const loadStats = () => { setStatsLoading(true); axios.get('/admin/api/stats').then(r => setStats(r.data)).catch(() => {}).finally(() => setStatsLoading(false)); };
+    const loadBookings = () => { setLoading(true); const p = new URLSearchParams(); if (filter) p.set('status', filter); axios.get(`/admin/api/bookings?${p}`).then(r => setBookings(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => showMsg('Gagal memuat booking.', 'error')).finally(() => setLoading(false)); };
+    const loadRentals = () => { setLoading(true); const p = new URLSearchParams(); if (filter) p.set('status', filter); axios.get(`/admin/api/rentals?${p}`).then(r => setRentals(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => showMsg('Gagal memuat sewa.', 'error')).finally(() => setLoading(false)); };
+    const loadPackages = () => axios.get('/admin/api/service-packages').then(r => setPackages(r.data.data)).catch(() => showMsg('Gagal memuat paket.', 'error'));
+    const loadAddons = () => axios.get('/admin/api/addons').then(r => setAddons(r.data.data)).catch(() => showMsg('Gagal memuat addons.', 'error'));
+    const loadTemplates = () => axios.get('/admin/api/photo-templates').then(r => setTemplates(r.data.data)).catch(() => showMsg('Gagal memuat templates.', 'error'));
+    const loadBlockedDates = () => axios.get('/admin/api/unavailable-dates').then(r => setBlockedDates(r.data.data)).catch(() => showMsg('Gagal memuat tanggal blok.', 'error'));
 
-    // Filters (separate per tab — shared filter caused empty rental list when booking filter didn't match)
-    const [bookingStatusFilter, setBookingStatusFilter] = useState('');
-    const [rentalStatusFilter, setRentalStatusFilter] = useState('pending_approval');
+    useEffect(() => { if (activeTab === 'bookings') loadBookings(); else if (activeTab === 'rentals') loadRentals(); }, [filter, activeTab]);
+    useEffect(() => { loadStats(); loadPackages(); loadAddons(); loadTemplates(); loadBlockedDates(); }, []);
 
-    const logout = (event) => {
-        event.preventDefault();
-        form.post('/logout');
+    // Actions
+    const req = (promise, type) => promise.then(r => { showMsg(r.data.message); if (type === 'booking') loadBookings(); else if (type === 'rental') loadRentals(); else loadBlockedDates(); loadStats(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error'));
+    
+    const handleApprove = id => req(axios.post(`/admin/api/bookings/${id}/approve`), 'booking');
+    const handleRentalApprove = id => req(axios.post(`/admin/api/rentals/${id}/approve`), 'rental');
+    const handleReject = id => setRejectModal({ open: true, id, type: 'booking' });
+    const handleRentalReject = id => setRejectModal({ open: true, id, type: 'rental' });
+    const doReject = reason => { 
+        const { id, type } = rejectModal; 
+        req(axios.post(`/admin/api/${type === 'booking' ? 'bookings' : 'rentals'}/${id}/reject`, { notes: reason }), type); 
+        setRejectModal({ open: false, id: null, type: null }); setSelectedItem(null); 
+    };
+    
+    const handleVerify = (pid, status, type) => {
+        axios.post(`/admin/api/${type === 'booking' ? 'payments' : 'rentals-payments'}/${pid}/verify`, { status }).then(r => {
+            showMsg(r.data.message); loadStats(); type === 'booking' ? loadBookings() : loadRentals();
+            setSelectedItem(prev => prev ? { ...prev, payments: prev.payments.map(p => p.id === pid ? { ...p, status } : p) } : null);
+        }).catch(err => showMsg(err.response?.data?.message || 'Gagal.', 'error'));
     };
 
-    const showMsg = (text, type = 'success') => {
-        setMessage({ text, type });
-        setTimeout(() => setMessage({ text: '', type: '' }), 5000);
-    };
+    const handleComplete = (id, type) => req(axios.post(`/admin/api/${type === 'booking' ? 'bookings' : 'rentals'}/${id}/complete`), type);
+    const handleCancel = (id, type) => { if (confirm('Batalkan pesanan ini?')) { req(axios.post(`/admin/api/${type === 'booking' ? 'bookings' : 'rentals'}/${id}/cancel`), type); setSelectedItem(null); } };
+    const handleRegenerateDoc = (code, type) => { if (confirm(`Regenerate dokumen ${type}?`)) axios.post(`/api/bookings/${code}/documents/regenerate`, { type }).then(r => { showMsg(r.data.message); loadBookings(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal.', 'error')); };
 
-    // Load Data Helpers
-    const loadBookings = () => {
-        setLoading(true);
-        const params = new URLSearchParams();
-        if (bookingStatusFilter) {
-            params.set('status', bookingStatusFilter);
-        }
-        axios.get(`/admin/api/bookings?${params.toString()}`)
-            .then((res) => setBookings(Array.isArray(res.data?.data) ? res.data.data : []))
-            .catch((err) => {
-                console.error('loadBookings failed', err);
-                showMsg(err.response?.data?.message || 'Gagal memuat booking.', 'error');
-                setBookings([]);
-            })
-            .finally(() => setLoading(false));
-    };
-
-    const loadRentals = () => {
-        setLoading(true);
-        const params = new URLSearchParams();
-        if (rentalStatusFilter) {
-            params.set('status', rentalStatusFilter);
-        }
-        axios.get(`/admin/api/rentals?${params.toString()}`)
-            .then((res) => setRentals(Array.isArray(res.data?.data) ? res.data.data : []))
-            .catch((err) => {
-                console.error('loadRentals failed', err);
-                showMsg(err.response?.data?.message || 'Gagal memuat data sewa.', 'error');
-            })
-            .finally(() => setLoading(false));
-    };
-
-    const openRentalsTab = () => {
-        setActiveTab('rentals');
-    };
-
-    const openBookingsTab = () => {
-        setActiveTab('bookings');
-    };
-
-    const loadPackages = () => {
-        axios.get('/admin/api/service-packages')
-            .then(res => setPackages(res.data.data))
-            .catch(() => showMsg('Gagal memuat paket jasa.', 'error'));
-    };
-
-    const loadAddons = () => {
-        axios.get('/admin/api/addons')
-            .then(res => setAddons(res.data.data))
-            .catch(() => showMsg('Gagal memuat addons.', 'error'));
-    };
-
-    const loadTemplates = () => {
-        axios.get('/admin/api/photo-templates')
-            .then(res => setTemplates(res.data.data))
-            .catch(() => showMsg('Gagal memuat templates.', 'error'));
-    };
-
-    const loadBlockedDates = () => {
-        axios.get('/admin/api/unavailable-dates')
-            .then(res => setBlockedDates(res.data.data))
-            .catch(() => showMsg('Gagal memuat tanggal blok.', 'error'));
-    };
-
-    useEffect(() => {
-        if (activeTab === 'bookings') {
-            loadBookings();
-        }
-    }, [bookingStatusFilter, activeTab]);
-
-    useEffect(() => {
-        if (activeTab === 'rentals') {
-            loadRentals();
-        }
-    }, [rentalStatusFilter, activeTab]);
-
-    useEffect(() => {
-        loadPackages();
-        loadAddons();
-        loadTemplates();
-        loadBlockedDates();
-    }, []);
-
-    // Booking Actions
-    const handleApprove = (id) => {
-        axios.post(`/admin/api/bookings/${id}/approve`)
-            .then(res => {
-                showMsg(res.data.message);
-                loadBookings();
-            })
-            .catch(err => showMsg(err.response?.data?.message || 'Gagal menyetujui booking.', 'error'));
-    };
-
-    const handleReject = (id) => {
-        const reason = prompt('Masukkan alasan penolakan booking:');
-        if (reason !== null) {
-            axios.post(`/admin/api/bookings/${id}/reject`, { notes: reason })
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadBookings();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal menolak booking.', 'error'));
-        }
-    };
-
-    const handleVerifyPayment = (paymentId, status) => {
-        axios.post(`/admin/api/payments/${paymentId}/verify`, { status })
-            .then(res => {
-                showMsg(res.data.message);
-                loadBookings();
-                loadBlockedDates();
-            })
-            .catch(err => showMsg(err.response?.data?.message || 'Gagal verifikasi pembayaran.', 'error'));
-    };
-
-    const handleCompleteEvent = (id) => {
-        axios.post(`/admin/api/bookings/${id}/complete`)
-            .then(res => {
-                showMsg(res.data.message);
-                loadBookings();
-            })
-            .catch(err => showMsg(err.response?.data?.message || 'Gagal menyelesaikan event.', 'error'));
-    };
-
-    const handleCancelBooking = (id) => {
-        if (confirm('Batalkan booking ini?')) {
-            axios.post(`/admin/api/bookings/${id}/cancel`)
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadBookings();
-                    loadBlockedDates();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal membatalkan booking.', 'error'));
-        }
-    };
-
-    const handleRegenerateDocument = (bookingCode, type) => {
-        if (confirm(`Regenerate dokumen ${type.replace('_', ' ')}?`)) {
-            axios.post(`/api/bookings/${bookingCode}/documents/regenerate`, { type })
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadBookings();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal me-regenerate dokumen.', 'error'));
-        }
-    };
-
-    // Rental Actions
-    const handleRentalApprove = (id) => {
-        axios.post(`/admin/api/rentals/${id}/approve`)
-            .then(res => {
-                showMsg(res.data.message);
-                loadRentals();
-            })
-            .catch(err => showMsg(err.response?.data?.message || 'Gagal menyetujui sewa.', 'error'));
-    };
-
-    const handleRentalReject = (id) => {
-        const reason = prompt('Masukkan alasan penolakan sewa:');
-        if (reason !== null) {
-            axios.post(`/admin/api/rentals/${id}/reject`, { notes: reason })
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadRentals();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal menolak sewa.', 'error'));
-        }
-    };
-
-    const handleRentalVerifyPayment = (paymentId, status) => {
-        axios.post(`/admin/api/rentals-payments/${paymentId}/verify`, { status })
-            .then(res => {
-                showMsg(res.data.message);
-                loadRentals();
-            })
-            .catch(err => showMsg(err.response?.data?.message || 'Gagal verifikasi pembayaran.', 'error'));
-    };
-
-    const handleCompleteRental = (id) => {
-        axios.post(`/admin/api/rentals/${id}/complete`)
-            .then(res => {
-                showMsg(res.data.message);
-                loadRentals();
-            })
-            .catch(err => showMsg(err.response?.data?.message || 'Gagal menyelesaikan sewa.', 'error'));
-    };
-
-    const handleCancelRental = (id) => {
-        if (confirm('Batalkan penyewaan ini?')) {
-            axios.post(`/admin/api/rentals/${id}/cancel`)
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadRentals();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal membatalkan sewa.', 'error'));
-        }
-    };
-
-    // Unavailable Dates Actions
-    const handleBlockDateSubmit = (e) => {
+    const handleBlockDateSubmit = e => {
         e.preventDefault();
         axios.post('/admin/api/unavailable-dates', blockForm)
-            .then(res => {
-                showMsg(res.data.message);
-                setBlockForm({ date: '', reason: '' });
-                loadBlockedDates();
-            })
-            .catch(err => showMsg(err.response?.data?.message || 'Gagal memblok tanggal.', 'error'));
+            .then(r => { showMsg(r.data.message); setBlockForm({ date: '', reason: '' }); loadBlockedDates(); })
+            .catch(err => showMsg(err.response?.data?.message || 'Gagal.', 'error'));
     };
-
-    const handleUnblockDate = (date) => {
-        if (confirm(`Buka blokir untuk tanggal ${date}?`)) {
+    const handleUnblockDate = date => {
+        if (confirm(`Buka blokir tanggal ${date}?`)) {
             axios.delete(`/admin/api/unavailable-dates/${date}`)
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadBlockedDates();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal membuka blok.', 'error'));
+                .then(r => { showMsg(r.data.message); loadBlockedDates(); })
+                .catch(err => showMsg(err.response?.data?.message || 'Gagal.', 'error'));
         }
     };
 
-    // Service Package CRUD
-    const handlePackageSubmit = (e) => {
+    // Config CRUD
+    const handleForm = (e, endpoint, formState, setFormState, isEdit, setIsEdit, reloadFn) => {
         e.preventDefault();
-        const request = isEditingPackage
-            ? axios.put(`/admin/api/service-packages/${packageForm.id}`, packageForm)
-            : axios.post('/admin/api/service-packages', packageForm);
-
-        request.then(res => {
-            showMsg(res.data.message);
-            setPackageForm({
-                id: null,
-                name: '',
-                category: 'soft_file',
-                description: '',
-                is_active: true,
-                display_order: 0,
-                includes_softfile: false,
-                includes_prints: false,
-                includes_qr_code: false,
-                includes_gif: false,
-                includes_custom_template: false,
-                includes_supporting_crew: false,
-                includes_tiket_antrian: false,
-            });
-            setIsEditingPackage(false);
-            loadPackages();
-        }).catch(err => showMsg(err.response?.data?.message || 'Gagal menyimpan paket.', 'error'));
+        const method = isEdit ? 'put' : 'post';
+        const url = `/admin/api/${endpoint}${isEdit ? `/${formState.id}` : ''}`;
+        axios[method](url, formState).then(r => { showMsg(r.data.message); setFormState({ ...formState, id: null }); setIsEdit(false); reloadFn(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error'));
     };
-
-    const handleEditPackage = (pkg) => {
-        setPackageForm({
-            id: pkg.id,
-            name: pkg.name,
-            category: pkg.category,
-            description: pkg.description || '',
-            is_active: !!pkg.is_active,
-            display_order: pkg.display_order ?? 0,
-            includes_softfile: !!pkg.includes_softfile,
-            includes_prints: !!pkg.includes_prints,
-            includes_qr_code: !!pkg.includes_qr_code,
-            includes_gif: !!pkg.includes_gif,
-            includes_custom_template: !!pkg.includes_custom_template,
-            includes_supporting_crew: !!pkg.includes_supporting_crew,
-            includes_tiket_antrian: !!pkg.includes_tiket_antrian,
-        });
-        setIsEditingPackage(true);
-    };
-
-    const handleDeletePackage = (id) => {
-        if (confirm('Hapus paket jasa ini beserta varian di dalamnya?')) {
-            axios.delete(`/admin/api/service-packages/${id}`)
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadPackages();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal menghapus paket.', 'error'));
-        }
-    };
-
-    // Package Variant CRUD
-    const handleVariantSubmit = (e) => {
+    
+    const handleTemplateSubmit = e => {
         e.preventDefault();
-        const request = isEditingVariant
-            ? axios.put(`/admin/api/package-variants/${variantForm.id}`, variantForm)
-            : axios.post('/admin/api/package-variants', variantForm);
-
-        request.then(res => {
-            showMsg(res.data.message);
-            setVariantForm({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', is_unlimited: false });
-            setIsEditingVariant(false);
-            loadPackages(); // Variants are nested in packages
-        }).catch(err => showMsg(err.response?.data?.message || 'Gagal menyimpan varian.', 'error'));
+        const fd = new FormData(); Object.entries(templateForm).forEach(([k, v]) => { if (v != null) fd.append(k, v); });
+        const url = `/admin/api/photo-templates${templateForm.id ? `/${templateForm.id}` : ''}`;
+        axios.post(url, fd, { headers: { 'Content-Type': 'multipart/form-data' }, params: templateForm.id ? { _method: 'PUT' } : {} })
+            .then(r => { showMsg(r.data.message); setTemplateForm({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', description: '', is_active: true, display_order: 0 }); loadTemplates(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error'));
     };
 
-    const handleEditVariant = (v) => {
-        setVariantForm({
-            id: v.id,
-            service_package_id: v.service_package_id,
-            name: v.name,
-            price: v.price,
-            duration_hours: v.duration_hours || '',
-            print_limit: v.print_limit || '',
-            extra_hour_price: v.extra_hour_price || '',
-            is_unlimited: !!v.is_unlimited,
-        });
-        setIsEditingVariant(true);
-    };
+    const del = (url, reloadFn) => { if (confirm('Hapus item ini?')) axios.delete(url).then(r => { showMsg(r.data.message); reloadFn(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error')); };
 
-    const handleDeleteVariant = (id) => {
-        if (confirm('Hapus varian paket ini?')) {
-            axios.delete(`/admin/api/package-variants/${id}`)
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadPackages();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal menghapus varian.', 'error'));
-        }
-    };
+    // Helpers
+    const formatRp = num => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num || 0);
+    const sumVerified = py => (py || []).filter(p => p.status === 'verified').reduce((s, p) => s + Number(p.amount || 0), 0);
+    const navBtn = (tab, label, count) => (
+        <button onClick={() => { setActiveTab(tab); setSelectedItem(null); setFilter(''); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === tab ? 'bg-primary/10 text-primary' : 'text-slate hover:bg-beige/50'}`}>
+            <span>{label}</span>
+            {count > 0 && <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-primary text-white' : 'bg-beige text-slate'}`}>{count}</span>}
+        </button>
+    );
 
-    // Addons CRUD
-    const handleAddonSubmit = (e) => {
-        e.preventDefault();
-        const request = isEditingAddon
-            ? axios.put(`/admin/api/addons/${addonForm.id}`, addonForm)
-            : axios.post('/admin/api/addons', addonForm);
+    const DetailPanel = () => {
+        if (!selectedItem) return null;
+        const item = selectedItem;
+        const isB = selectedType === 'booking';
+        const code = isB ? item.booking_code : item.rental_code;
+        const paid = sumVerified(item.payments);
+        const rem = Math.max(0, item.total_price - paid);
 
-        request.then(res => {
-            showMsg(res.data.message);
-            setAddonForm({ id: null, name: '', price: '', description: '', is_active: true, display_order: 0 });
-            setIsEditingAddon(false);
-            loadAddons();
-        }).catch(err => showMsg(err.response?.data?.message || 'Gagal menyimpan addon.', 'error'));
-    };
-
-    const handleEditAddon = (add) => {
-        setAddonForm({
-            id: add.id,
-            name: add.name,
-            price: add.price,
-            description: add.description || '',
-            is_active: !!add.is_active,
-            display_order: add.display_order ?? 0,
-        });
-        setIsEditingAddon(true);
-    };
-
-    const handleDeleteAddon = (id) => {
-        if (confirm('Hapus addon ini?')) {
-            axios.delete(`/admin/api/addons/${id}`)
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadAddons();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal menghapus addon.', 'error'));
-        }
-    };
-
-    // Templates CRUD
-    const handleTemplateSubmit = (e) => {
-        e.preventDefault();
-        const formData = new FormData();
-
-        Object.entries(templateForm).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-                formData.append(key, value);
-            }
-        });
-
-        const request = isEditingTemplate
-            ? axios.put(`/admin/api/photo-templates/${templateForm.id}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            })
-            : axios.post('/admin/api/photo-templates', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
-        request.then(res => {
-            showMsg(res.data.message);
-            setTemplateForm({
-                id: null,
-                name: '',
-                size: '4R',
-                frame_type: '',
-                layout_type: '',
-                description: '',
-                is_active: true,
-                display_order: 0,
-            });
-            setIsEditingTemplate(false);
-            loadTemplates();
-        }).catch(err => showMsg(err.response?.data?.message || 'Gagal menyimpan template.', 'error'));
-    };
-
-    const handleEditTemplate = (t) => {
-        setTemplateForm({
-            id: t.id,
-            name: t.name,
-            size: t.size,
-            frame_type: t.frame_type || '',
-            layout_type: t.layout_type || '',
-            description: t.description || '',
-            is_active: !!t.is_active,
-            display_order: t.display_order ?? 0,
-        });
-        setIsEditingTemplate(true);
-    };
-
-    const handleDeleteTemplate = (id) => {
-        if (confirm('Hapus template ini?')) {
-            axios.delete(`/admin/api/photo-templates/${id}`)
-                .then(res => {
-                    showMsg(res.data.message);
-                    loadTemplates();
-                })
-                .catch(err => showMsg(err.response?.data?.message || 'Gagal menghapus template.', 'error'));
-        }
-    };
-
-    const getStatusStyle = (status) => {
-        switch (status) {
-            case 'pending_approval':
-                return 'bg-amber-50 text-amber-700 border-amber-100';
-            case 'waiting_dp':
-                return 'bg-blue-50 text-blue-700 border-blue-100';
-            case 'confirmed':
-                return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-            case 'completed':
-                return 'bg-slate-100 text-slate-800 border-slate-200';
-            case 'expired':
-                return 'bg-orange-50 text-orange-700 border-orange-100';
-            case 'rejected':
-            case 'cancelled':
-                return 'bg-red-50 text-red-700 border-red-100';
-            default:
-                return 'bg-gray-50 text-gray-700 border-gray-100';
-        }
-    };
-
-    // Format DP expiration display
-    const formatExpiration = (dpExpiredAt) => {
-        if (!dpExpiredAt) return null;
-        const expiry = new Date(dpExpiredAt);
-        const now = new Date();
-        const diff = expiry - now;
-
-        if (diff <= 0) return { text: 'DP Expired', isExpired: true };
-
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        return { text: `${hours}j ${mins}m tersisa`, isExpired: false };
-    };
-
-    const sumVerifiedPayments = (payments = []) =>
-        payments
-            .filter((p) => p.status === 'verified')
-            .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-    const isManualPayment = (pay) =>
-        pay.payment_source === 'manual' || (!!pay.proof_image && pay.payment_source !== 'midtrans');
-
-    return (
-        <div className="min-h-screen bg-[#F8F9FC] font-sans antialiased text-charcoal">
-            {/* Header */}
-            <header className="sticky top-0 bg-white border-b border-beige z-30 px-6 py-4 shadow-sm">
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                        <img src="/images/logo.png" alt="Memforia Admin" className="w-10 h-10 rounded-full" onError={(e) => e.target.style.display = 'none'} />
-                        <div>
-                            <h1 className="font-serif text-xl md:text-2xl font-medium tracking-tight text-charcoal">Memoforia Admin Console</h1>
-                            <p className="text-xs text-warm-grey">Event Photobooth Vendor Booking Manager</p>
+        return (
+            <div className="fixed inset-y-0 right-0 w-full md:w-[480px] bg-white shadow-2xl border-l border-beige z-40 transform transition-transform overflow-y-auto flex flex-col">
+                <div className="sticky top-0 bg-white border-b border-beige px-6 py-4 flex items-center justify-between z-10">
+                    <div>
+                        <h3 className="font-serif text-lg font-semibold text-charcoal">{code}</h3>
+                        <div className="flex gap-2 mt-1"><StatusBadge status={item.status} /></div>
+                    </div>
+                    <button onClick={() => setSelectedItem(null)} className="p-2 hover:bg-beige rounded-full text-warm-grey"><X size={20} /></button>
+                </div>
+                
+                <div className="p-6 space-y-6 flex-1">
+                    {/* Customer Info */}
+                    <div className="bg-off-white rounded-xl p-4 border border-beige/60">
+                        <h4 className="text-xs font-bold uppercase text-warm-grey mb-3 flex items-center gap-2"><User size={14} /> Customer Info</h4>
+                        <div className="space-y-2 text-sm text-charcoal">
+                            <p><span className="text-warm-grey inline-block w-20">Name:</span> {item.customer_name}</p>
+                            <p><span className="text-warm-grey inline-block w-20">Phone:</span> {item.customer_phone}</p>
+                            <p><span className="text-warm-grey inline-block w-20">Email:</span> {item.customer_email}</p>
                         </div>
                     </div>
-                    <div className="flex items-center space-x-4">
-                        <span className="hidden sm:inline text-sm text-slate">Welcome, <strong className="font-medium text-charcoal">{auth?.user?.name || 'Administrator'}</strong></span>
-                        <button onClick={logout} className="flex items-center space-x-1 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-semibold tracking-wider uppercase transition-colors">
-                            <LogOut size={14} /> <span>Logout</span>
-                        </button>
+
+                    {/* Event/Rental Info */}
+                    <div className="bg-off-white rounded-xl p-4 border border-beige/60">
+                        <h4 className="text-xs font-bold uppercase text-warm-grey mb-3 flex items-center gap-2"><Calendar size={14} /> {isB ? 'Event Details' : 'Rental Details'}</h4>
+                        <div className="space-y-2 text-sm text-charcoal">
+                            {isB ? (
+                                <>
+                                    <p><span className="text-warm-grey inline-block w-20">Event:</span> {item.event_name}</p>
+                                    <p><span className="text-warm-grey inline-block w-20">Location:</span> {item.event_location}</p>
+                                    <p><span className="text-warm-grey inline-block w-20">Date:</span> {item.event_datetime || item.event_date}</p>
+                                    <p><span className="text-warm-grey inline-block w-20">Package:</span> {item.service_package?.name} ({item.package_variant?.name})</p>
+                                    <p><span className="text-warm-grey inline-block w-20">Frame:</span> {item.selected_template?.name || 'Custom'}</p>
+                                    {item.addons?.length > 0 && (
+                                        <div className="mt-2 pt-2 border-t border-beige">
+                                            <p className="text-xs font-semibold text-slate mb-1">Addons:</p>
+                                            <ul className="list-disc list-inside text-xs text-warm-grey">
+                                                {item.addons.map(a => <li key={a.id}>{a.name} (x{a.pivot.quantity})</li>)}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <p><span className="text-warm-grey inline-block w-20">Start:</span> {item.start_date}</p>
+                                    <p><span className="text-warm-grey inline-block w-20">End:</span> {item.end_date}</p>
+                                    <div className="mt-2 pt-2 border-t border-beige">
+                                        <p className="text-xs font-semibold text-slate mb-1">Items:</p>
+                                        <ul className="list-disc list-inside text-xs text-warm-grey">
+                                            {item.items?.map(i => <li key={i.id}>{i.equipment?.name} (x{i.qty})</li>)}
+                                        </ul>
+                                    </div>
+                                </>
+                            )}
+                            {item.notes && <div className="mt-2 p-3 bg-amber-50 rounded-lg text-xs italic text-amber-800 border border-amber-100">{item.notes}</div>}
+                        </div>
                     </div>
-                </div>
-            </header>
 
-            {/* Notifications */}
-            {message.text && (
-                <div className={`fixed top-20 right-6 z-50 px-6 py-3 rounded-xl border text-sm shadow-lg transition-all ${message.type === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
-                    {message.text}
-                </div>
-            )}
-
-            <div className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
-                {/* Sidebar Navigation */}
-                <div className="lg:col-span-1 space-y-2">
-                    <button onClick={openBookingsTab}
-                        className={`w-full flex items-center space-x-3 px-6 py-4 rounded-2xl text-left font-medium transition-all ${activeTab === 'bookings' ? 'bg-primary text-white shadow-lg' : 'bg-white hover:bg-beige text-charcoal'}`}>
-                        <ListCollapse size={18} />
-                        <span>Booking approvals</span>
-                    </button>
-                    <button onClick={openRentalsTab}
-                        className={`w-full flex items-center space-x-3 px-6 py-4 rounded-2xl text-left font-medium transition-all ${activeTab === 'rentals' ? 'bg-primary text-white shadow-lg' : 'bg-white hover:bg-beige text-charcoal'}`}>
-                        <Package size={18} />
-                        <span className="flex-1">Rental approvals</span>
-                        {pendingRentalCount > 0 && (
-                            <span className={`min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-bold text-center ${
-                                activeTab === 'rentals' ? 'bg-white text-primary' : 'bg-primary text-white'
-                            }`}>
-                                {pendingRentalCount}
-                            </span>
-                        )}
-                    </button>
-                    <button onClick={() => setActiveTab('calendar')}
-                        className={`w-full flex items-center space-x-3 px-6 py-4 rounded-2xl text-left font-medium transition-all ${activeTab === 'calendar' ? 'bg-primary text-white shadow-lg' : 'bg-white hover:bg-beige text-charcoal'}`}>
-                        <Calendar size={18} />
-                        <span>Calendar blocks</span>
-                    </button>
-                    <button onClick={() => setActiveTab('configuration')}
-                        className={`w-full flex items-center space-x-3 px-6 py-4 rounded-2xl text-left font-medium transition-all ${activeTab === 'configuration' ? 'bg-primary text-white shadow-lg' : 'bg-white hover:bg-beige text-charcoal'}`}>
-                        <Package size={18} />
-                        <span>Configuration CRUD</span>
-                    </button>
-                </div>
-
-                {/* Main Panel Content */}
-                <div className="lg:col-span-3">
-                    
-                    {/* TAB: BOOKINGS APPROVAL & PAYMENTS */}
-                    {activeTab === 'bookings' && (
-                        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-primary-50">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 pb-4 border-b border-beige">
-                                <div>
-                                    <h2 className="font-serif text-2xl text-charcoal">Booking Requests Pipeline</h2>
-                                    <p className="text-xs text-warm-grey">Verify customer events, manage waitlists, and verify DP/full payments</p>
-                                </div>
-                                <select value={bookingStatusFilter} onChange={e => setBookingStatusFilter(e.target.value)} className="mt-4 sm:mt-0 px-4 py-2 border border-beige rounded-xl bg-off-white text-sm focus:outline-none">
-                                    <option value="">Semua Status</option>
-                                    <option value="pending_approval">Pending Approval</option>
-                                    <option value="waiting_dp">Waiting DP</option>
-                                    <option value="confirmed">Confirmed (Locked Calendar)</option>
-                                    <option value="completed">Completed</option>
-                                    <option value="rejected">Rejected</option>
-                                    <option value="cancelled">Cancelled</option>
-                                    <option value="expired">Expired (DP Timeout)</option>
-                                </select>
-                            </div>
-
-                            {loading ? (
-                                <div className="flex items-center justify-center py-16">
-                                    <Loader2 className="animate-spin text-primary" size={32} />
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {bookings.map(booking => (
-                                        <div key={booking.id} className="border border-beige rounded-2xl p-6 hover:shadow-md transition-shadow bg-white">
-                                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-beige pb-3 mb-4">
-                                                <div>
-                                                    <span className="text-xs font-semibold text-primary">{booking.booking_code}</span>
-                                                    <h3 className="font-serif text-lg text-charcoal">{booking.event_name}</h3>
-                                                </div>
-                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase border ${getStatusStyle(booking.status)}`}>
-                                                    {booking.status.replace('_', ' ')}
-                                                </span>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate mb-6">
-                                                <div>
-                                                    <p>👤 <strong>Customer:</strong> {booking.customer_name} ({booking.customer_phone})</p>
-                                                    <p>✉️ <strong>Email:</strong> {booking.customer_email}</p>
-                                                    <p>📍 <strong>Location:</strong> {booking.event_location}</p>
-                                                    <p>📅 <strong>Event Time:</strong> {booking.event_datetime || booking.event_date}</p>
-                                                    {booking.status === 'waiting_dp' && booking.dp_expired_at && (() => {
-                                                        const exp = formatExpiration(booking.dp_expired_at);
-                                                        if (!exp) return null;
-                                                        return <p className={`text-xs font-semibold mt-1 ${exp.isExpired ? 'text-orange-600' : 'text-blue-600'}`}>⏰ {exp.isExpired ? '⚠️ ' : ''}Batas DP: {new Date(booking.dp_expired_at).toLocaleString('id-ID')} ({exp.text})</p>;
-                                                    })()}
-                                                    {booking.status === 'expired' && <p className="text-xs font-semibold text-orange-600 mt-1">⚠️ Booking expired — batas waktu DP terlewati</p>}
-                                                </div>
-                                                <div>
-                                                    <p>📦 <strong>Package:</strong> {booking.service_package?.name} ({booking.package_variant?.name || 'Varian Default'})</p>
-                                                    <p>✨ <strong>Template Frame:</strong> {booking.selected_template?.name || 'Custom'}</p>
-                                                    <p>💵 <strong>Total Price:</strong> Rp {Number(booking.total_price).toLocaleString('id-ID')}</p>
-                                                    <p>💳 <strong>Payment status:</strong> <span className="font-semibold uppercase text-xs">{booking.payment_status?.replace('_', ' ')}</span></p>
-                                                </div>
-                                            </div>
-
-                                            {/* Addons List */}
-                                            {booking.addons?.length > 0 && (
-                                                <div className="bg-off-white rounded-xl p-4 text-xs mb-6 border border-beige/60">
-                                                    <strong className="block text-primary mb-1">Addons Terpilih:</strong>
-                                                    <ul className="list-disc list-inside space-y-1 text-slate">
-                                                        {booking.addons.map(add => (
-                                                            <li key={add.id}>{add.name} (x{add.pivot.quantity}) - Rp {(Number(add.pivot.price) * add.pivot.quantity).toLocaleString('id-ID')}</li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            )}
-
-                                            {booking.notes && (
-                                                <div className="bg-off-white rounded-xl p-4 text-xs italic mb-6">
-                                                    <strong>Catatan:</strong> {booking.notes}
-                                                </div>
-                                            )}
-
-                                            {/* Payments Proofs Verification */}
-                                            {booking.payments?.length > 0 && (
-                                                <div className="bg-blue-50/20 border border-blue-100 rounded-xl p-4 mb-6">
-                                                    <strong className="block text-xs uppercase tracking-wider text-blue-700 mb-2">Riwayat Bukti Transfer:</strong>
-                                                    <div className="space-y-3">
-                                                        {booking.payments.map(pay => (
-                                                            <div key={pay.id} className="flex items-center justify-between border-b border-blue-50/50 pb-2 last:border-b-0 last:pb-0">
-                                                                <div className="text-xs">
-                                                                    <p>💰 <strong>Nominal:</strong> Rp {Number(pay.amount).toLocaleString('id-ID')} ({pay.payment_type?.toUpperCase()})</p>
-                                                                    <p>🏦 <strong>Metode:</strong> {pay.payment_method}</p>
-                                                                    <p>📂 <strong>Bukti Gambar:</strong> <a href={pay.proof_image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Lihat Gambar</a></p>
-                                                                    <p>📋 <strong>Status:</strong> <span className="font-semibold">{pay.status}</span></p>
-                                                                </div>
-                                                                {pay.status === 'pending' && isManualPayment(pay) && (
-                                                                    <div className="flex space-x-2">
-                                                                        <button onClick={() => handleVerifyPayment(pay.id, 'verified')} className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-full"><Check size={14} /></button>
-                                                                        <button onClick={() => handleVerifyPayment(pay.id, 'rejected')} className="bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full"><X size={14} /></button>
-                                                                    </div>
-                                                                )}
-                                                                {pay.status === 'pending' && pay.payment_source === 'midtrans' && (
-                                                                    <span className="text-[10px] text-warm-grey uppercase">Menunggu gateway</span>
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Document Management */}
-                                            {booking.documents?.length > 0 && (
-                                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
-                                                    <strong className="block text-xs uppercase tracking-wider text-slate-700 mb-3">Dokumen Booking:</strong>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                        {booking.documents.map(doc => (
-                                                            <div key={doc.id} className="flex flex-col border border-slate-200 rounded-lg p-3 bg-white hover:border-primary transition-colors">
-                                                                <div className="flex justify-between items-start mb-2">
-                                                                    <div>
-                                                                        <span className="text-xs font-bold text-primary block uppercase">{doc.document_type.replace('_', ' ')}</span>
-                                                                        <span className="text-[10px] text-warm-grey">{doc.document_number}</span>
-                                                                    </div>
-                                                                    <span className="text-[10px] text-warm-grey">{new Date(doc.generated_at).toLocaleString('id-ID')}</span>
-                                                                </div>
-                                                                <div className="flex space-x-2 mt-auto pt-2 border-t border-slate-100">
-                                                                    <a href={`/api/documents/${doc.id}/download`} target="_blank" rel="noopener noreferrer" 
-                                                                       className="flex-1 text-center bg-primary hover:bg-primary-dark text-white py-1.5 rounded text-[10px] font-semibold transition-colors">
-                                                                        Download
-                                                                    </a>
-                                                                    <button onClick={() => handleRegenerateDocument(booking.booking_code, doc.document_type)}
-                                                                       className="flex-1 text-center bg-white border border-primary text-primary hover:bg-slate-50 py-1.5 rounded text-[10px] font-semibold transition-colors">
-                                                                        Regenerate
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Actions */}
-                                            <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-beige">
-                                                {booking.status === 'pending_approval' && (
-                                                    <>
-                                                        <button onClick={() => handleApprove(booking.id)} className="flex items-center space-x-1 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-full text-xs font-semibold transition-colors shadow-md">
-                                                            <Check size={14} /> <span>Approve (Waiting DP)</span>
-                                                        </button>
-                                                        <button onClick={() => handleReject(booking.id)} className="flex items-center space-x-1 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-semibold transition-colors">
-                                                            <X size={14} /> <span>Reject</span>
-                                                        </button>
-                                                    </>
-                                                )}
-
-                                                {booking.status === 'confirmed' && (
-                                                    <button onClick={() => handleCompleteEvent(booking.id)} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition-colors">
-                                                        Selesaikan Event (Completed)
-                                                    </button>
-                                                )}
-
-                                                {['waiting_dp', 'confirmed'].includes(booking.status) && (
-                                                    <button onClick={() => handleCancelBooking(booking.id)} className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-semibold transition-colors">
-                                                        Batalkan Booking
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-
-                                    {bookings.length === 0 && (
-                                        <div className="text-center py-16 text-warm-grey">
-                                            <ListCollapse size={40} className="mx-auto mb-2 opacity-50" />
-                                            <p className="font-light">Tidak ada data booking pada kategori status ini.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                    {/* Financial Info */}
+                    <div className="bg-off-white rounded-xl p-4 border border-beige/60">
+                        <h4 className="text-xs font-bold uppercase text-warm-grey mb-3 flex items-center gap-2"><CreditCard size={14} /> Financials</h4>
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm text-warm-grey">Total Price</span>
+                            <span className="text-lg font-bold text-charcoal">{formatRp(item.total_price)}</span>
                         </div>
-                    )}
-
-                    {/* TAB: RENTALS APPROVAL & PAYMENTS */}
-                    {activeTab === 'rentals' && (
-                        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-primary-50">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 pb-4 border-b border-beige">
-                                <div>
-                                    <h2 className="font-serif text-2xl text-charcoal">Rental Requests Pipeline</h2>
-                                    <p className="text-xs text-warm-grey">Manage equipment rentals, approve requests, and verify payments</p>
-                                </div>
-                                <select value={rentalStatusFilter} onChange={e => setRentalStatusFilter(e.target.value)} className="mt-4 sm:mt-0 px-4 py-2 border border-beige rounded-xl bg-off-white text-sm focus:outline-none">
-                                    <option value="">Semua Status</option>
-                                    <option value="pending_approval">Menunggu Persetujuan</option>
-                                    <option value="waiting_dp">Waiting DP</option>
-                                    <option value="confirmed">Confirmed</option>
-                                    <option value="completed">Completed</option>
-                                    <option value="rejected">Rejected</option>
-                                    <option value="cancelled">Cancelled</option>
-                                    <option value="expired">Expired</option>
-                                </select>
-                            </div>
-
-                            {loading ? (
-                                <div className="flex items-center justify-center py-16">
-                                    <Loader2 className="animate-spin text-primary" size={32} />
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {rentals.map(rental => (
-                                        <div key={rental.id} className="border border-beige rounded-2xl p-6 hover:shadow-md transition-shadow bg-white">
-                                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-beige pb-3 mb-4">
-                                                <div>
-                                                    <span className="text-xs font-semibold text-primary">{rental.rental_code}</span>
-                                                    <h3 className="font-serif text-lg text-charcoal">Rental Alat #{rental.id}</h3>
-                                                </div>
-                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase border ${getStatusStyle(rental.status)}`}>
-                                                    {rental.status === 'pending_approval' ? 'menunggu persetujuan' : rental.status.replace('_', ' ')}
-                                                </span>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate mb-6">
-                                                <div>
-                                                    <p>👤 <strong>Customer:</strong> {rental.customer_name} ({rental.customer_phone})</p>
-                                                    <p>✉️ <strong>Email:</strong> {rental.customer_email}</p>
-                                                    <p>📅 <strong>Rent Dates:</strong> {rental.start_date} s/d {rental.end_date}</p>
-                                                    {rental.status === 'waiting_dp' && rental.dp_expired_at && (() => {
-                                                        const exp = formatExpiration(rental.dp_expired_at);
-                                                        if (!exp) return null;
-                                                        return <p className={`text-xs font-semibold mt-1 ${exp.isExpired ? 'text-orange-600' : 'text-blue-600'}`}>⏰ {exp.isExpired ? '⚠️ ' : ''}Batas DP: {new Date(rental.dp_expired_at).toLocaleString('id-ID')} ({exp.text})</p>;
-                                                    })()}
-                                                    {rental.status === 'expired' && <p className="text-xs font-semibold text-orange-600 mt-1">⚠️ Sewa expired — batas waktu DP terlewati</p>}
-                                                </div>
-                                                <div>
-                                                    <p>💵 <strong>Total Price:</strong> Rp {Number(rental.total_price).toLocaleString('id-ID')}</p>
-                                                    <p>💳 <strong>Payment status:</strong> <span className="font-semibold uppercase text-xs">{rental.payment_status?.replace('_', ' ')}</span></p>
-                                                    {(() => {
-                                                        const paid = sumVerifiedPayments(rental.payments);
-                                                        const remaining = Math.max(0, Number(rental.total_price || 0) - paid);
-                                                        return (
-                                                            <>
-                                                                <p>✅ <strong>Dibayar:</strong> Rp {paid.toLocaleString('id-ID')}</p>
-                                                                <p>📌 <strong>Sisa:</strong> Rp {remaining.toLocaleString('id-ID')}</p>
-                                                            </>
-                                                        );
-                                                    })()}
-                                                    {rental.status === 'confirmed' && rental.settlement_due_at && (
-                                                        <p className="text-xs font-semibold text-amber-700 mt-1">
-                                                            ⏳ Batas pelunasan: {new Date(rental.settlement_due_at).toLocaleString('id-ID')}
-                                                        </p>
-                                                    )}
-                                                    <p className="text-xs text-primary mt-2">
-                                                        🔗 Pelanggan lacak: <span className="font-mono">/track-booking</span> · kode <strong>{rental.rental_code}</strong>
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            {/* Items List */}
-                                            {rental.items?.length > 0 && (
-                                                <div className="bg-off-white rounded-xl p-4 text-xs mb-6 border border-beige/60">
-                                                    <strong className="block text-primary mb-1">Peralatan Disewa:</strong>
-                                                    <ul className="list-disc list-inside space-y-1 text-slate">
-                                                        {rental.items.map(item => (
-                                                            <li key={item.id}>{item.equipment?.name || 'Unknown Item'} (x{item.qty}) - Rp {Number(item.price).toLocaleString('id-ID')}</li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            )}
-
-                                            {rental.notes && (
-                                                <div className="bg-off-white rounded-xl p-4 text-xs italic mb-6">
-                                                    <strong>Catatan:</strong> {rental.notes}
-                                                </div>
-                                            )}
-
-                                            {/* Payments Proofs Verification */}
-                                            {rental.payments?.length > 0 && (
-                                                <div className="bg-blue-50/20 border border-blue-100 rounded-xl p-4 mb-6">
-                                                    <strong className="block text-xs uppercase tracking-wider text-blue-700 mb-2">Riwayat Bukti Transfer:</strong>
-                                                    <div className="space-y-3">
-                                                        {rental.payments.map(pay => (
-                                                            <div key={pay.id} className="flex items-center justify-between border-b border-blue-50/50 pb-2 last:border-b-0 last:pb-0">
-                                                                <div className="text-xs">
-                                                                    <p>💰 <strong>Nominal:</strong> Rp {Number(pay.amount).toLocaleString('id-ID')} ({pay.payment_type?.replace('_', ' ')})</p>
-                                                                    <p>🏦 <strong>Metode:</strong> {pay.payment_method} · <span className="uppercase">{pay.payment_source || 'manual'}</span></p>
-                                                                    {pay.proof_image && (
-                                                                        <p>📂 <strong>Bukti:</strong> <a href={pay.proof_image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Lihat Gambar</a></p>
-                                                                    )}
-                                                                    <p>📋 <strong>Status:</strong> <span className="font-semibold">{pay.status}</span></p>
-                                                                </div>
-                                                                {pay.status === 'pending' && isManualPayment(pay) && (
-                                                                    <div className="flex space-x-2">
-                                                                        <button onClick={() => handleRentalVerifyPayment(pay.id, 'verified')} className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-full"><Check size={14} /></button>
-                                                                        <button onClick={() => handleRentalVerifyPayment(pay.id, 'rejected')} className="bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full"><X size={14} /></button>
-                                                                    </div>
-                                                                )}
-                                                                {pay.status === 'pending' && pay.payment_source === 'midtrans' && (
-                                                                    <span className="text-[10px] text-warm-grey uppercase">Menunggu gateway</span>
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Actions */}
-                                            <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-beige">
-                                                {rental.status === 'pending_approval' && (
-                                                    <>
-                                                        <button onClick={() => handleRentalApprove(rental.id)} className="flex items-center space-x-1 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-full text-xs font-semibold transition-colors shadow-md">
-                                                            <Check size={14} /> <span>Approve (Waiting DP)</span>
-                                                        </button>
-                                                        <button onClick={() => handleRentalReject(rental.id)} className="flex items-center space-x-1 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-semibold transition-colors">
-                                                            <X size={14} /> <span>Reject</span>
-                                                        </button>
-                                                    </>
-                                                )}
-
-                                                {rental.status === 'confirmed' && rental.payment_status === 'paid' && (
-                                                    <button onClick={() => handleCompleteRental(rental.id)} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition-colors">
-                                                        Selesaikan Sewa (Completed)
-                                                    </button>
-                                                )}
-
-                                                {['waiting_dp', 'confirmed'].includes(rental.status) && (
-                                                    <button onClick={() => handleCancelRental(rental.id)} className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-semibold transition-colors">
-                                                        Batalkan Sewa
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-
-                                    {rentals.length === 0 && (
-                                        <div className="text-center py-16 text-warm-grey">
-                                            <Package size={40} className="mx-auto mb-2 opacity-50" />
-                                            <p className="font-light">Tidak ada data penyewaan pada kategori status ini.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm text-warm-grey">Paid (Verified)</span>
+                            <span className="text-sm font-semibold text-emerald-600">{formatRp(paid)}</span>
                         </div>
-                    )}
+                        <div className="flex justify-between items-center pt-2 border-t border-beige">
+                            <span className="text-sm text-warm-grey">Remaining</span>
+                            <span className="text-sm font-bold text-red-500">{formatRp(rem)}</span>
+                        </div>
+                    </div>
 
-                    {/* TAB: CALENDAR BLOCKS */}
-                    {activeTab === 'calendar' && (
-                        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-primary-50">
-                            <h2 className="font-serif text-2xl text-charcoal mb-2">Block Calendar Dates</h2>
-                            <p className="text-xs text-warm-grey mb-8 pb-4 border-b border-beige">Manage vendor off-days or maintenance blocks</p>
-
-                            <form onSubmit={handleBlockDateSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-8 bg-off-white/50 p-6 rounded-2xl border border-beige">
-                                <div>
-                                    <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal mb-2">Select Date</label>
-                                    <input type="date" required value={blockForm.date} onChange={e => setBlockForm({ ...blockForm, date: e.target.value })}
-                                        className="w-full px-4 py-2.5 rounded-xl border border-beige bg-white focus:outline-none focus:border-primary text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal mb-2">Block Reason</label>
-                                    <input type="text" placeholder="e.g. Maintenance, Vendor off" value={blockForm.reason} onChange={e => setBlockForm({ ...blockForm, reason: e.target.value })}
-                                        className="w-full px-4 py-2.5 rounded-xl border border-beige bg-white focus:outline-none focus:border-primary text-sm" />
-                                </div>
-                                <div>
-                                    <button type="submit" className="w-full flex items-center justify-center space-x-1 bg-primary hover:bg-primary-dark text-white py-3 rounded-xl text-xs font-semibold transition-colors uppercase tracking-wider shadow-md shadow-primary/10">
-                                        <Plus size={16} /> <span>Block Date</span>
-                                    </button>
-                                </div>
-                            </form>
-
-                            <h3 className="font-serif text-lg text-charcoal mb-4">Blocked Calendar Dates</h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="border-b border-beige text-xs text-warm-grey font-semibold uppercase">
-                                            <th className="py-3 px-4">Date</th>
-                                            <th className="py-3 px-4">Reason</th>
-                                            <th className="py-3 px-4">Blocked By</th>
-                                            <th className="py-3 px-4 text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-beige text-sm">
-                                        {blockedDates.map(bd => (
-                                            <tr key={bd.id} className="hover:bg-off-white/50">
-                                                <td className="py-4 px-4 font-semibold text-charcoal">{bd.date}</td>
-                                                <td className="py-4 px-4 font-light text-slate">{bd.reason}</td>
-                                                <td className="py-4 px-4 text-xs font-medium text-slate">{bd.creator?.name || 'Admin'}</td>
-                                                <td className="py-4 px-4 text-right">
-                                                    <button onClick={() => handleUnblockDate(bd.date)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-
-                                        {blockedDates.length === 0 && (
-                                            <tr>
-                                                <td colSpan="4" className="text-center py-8 text-warm-grey font-light">Belum ada tanggal diblokir.</td>
-                                            </tr>
+                    {/* Payments */}
+                    <div className="bg-off-white rounded-xl p-4 border border-beige/60">
+                        <h4 className="text-xs font-bold uppercase text-warm-grey mb-3 flex items-center gap-2"><RefreshCw size={14} /> Payment History</h4>
+                        {item.payments?.length > 0 ? (
+                            <div className="space-y-3">
+                                {item.payments.map(p => (
+                                    <div key={p.id} className="p-3 bg-white border border-beige rounded-lg">
+                                        <div className="flex justify-between mb-1">
+                                            <span className="text-xs font-bold text-charcoal uppercase">{p.payment_type}</span>
+                                            <span className={`text-[10px] font-bold uppercase ${p.status==='verified'?'text-emerald-600':p.status==='rejected'?'text-red-600':'text-amber-600'}`}>{p.status}</span>
+                                        </div>
+                                        <p className="text-sm font-semibold text-charcoal mb-1">{formatRp(p.amount)}</p>
+                                        <p className="text-[11px] text-warm-grey capitalize">{p.payment_method} · {p.payment_source}</p>
+                                        
+                                        {p.proof_image && (
+                                            <a href={p.proof_image} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary-dark">
+                                                <Image size={12} /> View Proof
+                                            </a>
                                         )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* TAB: CONFIGURATION CRUD */}
-                    {activeTab === 'configuration' && (
-                        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-primary-50">
-                            <div className="flex border-b border-beige mb-8">
-                                {['packages', 'variants', 'addons', 'templates'].map(sub => (
-                                    <button key={sub} onClick={() => setConfigSubTab(sub)}
-                                        className={`px-6 py-3 font-medium text-sm transition-all border-b-2 capitalize ${configSubTab === sub ? 'border-primary text-primary' : 'border-transparent text-slate hover:text-charcoal'}`}>
-                                        {sub}
-                                    </button>
+                                        
+                                        {p.status === 'pending' && (p.payment_source === 'manual' || p.proof_image) && (
+                                            <div className="flex gap-2 mt-3 pt-3 border-t border-beige">
+                                                <button onClick={() => handleVerify(p.id, 'verified', selectedType)} className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 rounded-lg text-xs font-semibold transition-colors">Verify</button>
+                                                <button onClick={() => handleVerify(p.id, 'rejected', selectedType)} className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 py-1.5 rounded-lg text-xs font-semibold transition-colors">Reject</button>
+                                            </div>
+                                        )}
+                                    </div>
                                 ))}
                             </div>
+                        ) : <p className="text-xs text-warm-grey">No payment records found.</p>}
+                    </div>
 
-                            {/* SUB TAB: SERVICE PACKAGES */}
-                            {configSubTab === 'packages' && (
-                                <div className="space-y-8">
-                                    <form onSubmit={handlePackageSubmit} className="space-y-4 bg-off-white/50 p-6 rounded-2xl border border-beige">
-                                        <h3 className="font-serif text-md text-charcoal mb-2">{isEditingPackage ? 'Edit Paket Jasa' : 'Tambah Paket Jasa Baru'}</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Package Name</label>
-                                                <input type="text" required placeholder="e.g. Premium Unlimited" value={packageForm.name} onChange={e => setPackageForm({ ...packageForm, name: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Category</label>
-                                                <select required value={packageForm.category} onChange={e => setPackageForm({ ...packageForm, category: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm">
-                                                    <option value="soft_file">Soft File Only</option>
-                                                    <option value="unlimited_print">Unlimited Prints</option>
-                                                    <option value="limited_print">Limited Prints</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Display Order</label>
-                                                <input type="number" min="0" value={packageForm.display_order} onChange={e => setPackageForm({ ...packageForm, display_order: Number(e.target.value) })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div className="flex items-center space-x-2 pt-6">
-                                                <input type="checkbox" id="pkg_active" checked={packageForm.is_active} onChange={e => setPackageForm({ ...packageForm, is_active: e.target.checked })} />
-                                                <label htmlFor="pkg_active" className="text-xs font-semibold text-charcoal">Package Active</label>
-                                            </div>
-                                        </div>
+                    {/* Documents */}
+                    {isB && item.documents?.length > 0 && (
+                        <div className="bg-off-white rounded-xl p-4 border border-beige/60">
+                            <h4 className="text-xs font-bold uppercase text-warm-grey mb-3 flex items-center gap-2"><FileText size={14} /> Documents</h4>
+                            <div className="space-y-2">
+                                {item.documents.map(d => (
+                                    <div key={d.id} className="flex items-center justify-between p-2 bg-white border border-beige rounded-lg">
                                         <div>
-                                            <label className="block text-xs font-semibold text-charcoal mb-1">Description</label>
-                                            <textarea required placeholder="Detailed marketing/service text..." value={packageForm.description} onChange={e => setPackageForm({ ...packageForm, description: e.target.value })}
-                                                className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm resize-none" rows="2" />
+                                            <p className="text-xs font-bold text-charcoal uppercase">{d.document_type.replace('_',' ')}</p>
+                                            <p className="text-[10px] text-warm-grey">{new Date(d.generated_at).toLocaleDateString('id-ID')}</p>
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_softfile} onChange={e => setPackageForm({ ...packageForm, includes_softfile: e.target.checked })} /> Softfile</label>
-                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_prints} onChange={e => setPackageForm({ ...packageForm, includes_prints: e.target.checked })} /> Prints</label>
-                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_qr_code} onChange={e => setPackageForm({ ...packageForm, includes_qr_code: e.target.checked })} /> QR Code</label>
-                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_gif} onChange={e => setPackageForm({ ...packageForm, includes_gif: e.target.checked })} /> GIF</label>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_custom_template} onChange={e => setPackageForm({ ...packageForm, includes_custom_template: e.target.checked })} /> Custom Template</label>
-                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_supporting_crew} onChange={e => setPackageForm({ ...packageForm, includes_supporting_crew: e.target.checked })} /> Supporting Crew</label>
-                                                <label className="flex items-center gap-2 text-xs font-semibold text-charcoal"><input type="checkbox" checked={packageForm.includes_tiket_antrian} onChange={e => setPackageForm({ ...packageForm, includes_tiket_antrian: e.target.checked })} /> Tiket Antrian</label>
-                                            </div>
+                                        <div className="flex gap-1">
+                                            <a href={`/api/bookings/${d.id}/download`} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md"><Eye size={14} /></a>
+                                            <button onClick={() => handleRegenerateDoc(item.booking_code, d.document_type)} className="p-1.5 bg-slate-100 text-slate hover:bg-slate-200 rounded-md"><RefreshCw size={14} /></button>
                                         </div>
-                                        <div className="flex justify-end space-x-2 pt-2">
-                                            {isEditingPackage && (
-                                                <button type="button" onClick={() => { setIsEditingPackage(false); setPackageForm({ id: null, name: '', category: 'soft_file', description: '', is_active: true }); }} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-slate rounded-lg text-xs font-semibold">Cancel</button>
-                                            )}
-                                            <button type="submit" className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg text-xs font-semibold shadow-md shadow-primary/10">
-                                                <span>{isEditingPackage ? 'Update Paket' : 'Simpan Paket'}</span>
-                                            </button>
-                                        </div>
-                                    </form>
-
-                                    <h3 className="font-serif text-lg text-charcoal mb-4">Daftar Paket Jasa</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {packages.map(pkg => (
-                                            <div key={pkg.id} className="border border-beige rounded-2xl p-5 bg-white flex flex-col justify-between hover:shadow-sm">
-                                                <div>
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h4 className="font-serif text-md text-charcoal">{pkg.name}</h4>
-                                                        <span className="text-xs text-warm-grey capitalize">({pkg.category?.replace('_', ' ')})</span>
-                                                    </div>
-                                                    <p className="text-xs text-slate font-light leading-relaxed mb-4">{pkg.description}</p>
-                                                <div className="flex flex-wrap gap-2 mb-4 text-[10px] uppercase">
-                                                    <span className="px-2 py-1 rounded bg-beige text-charcoal">Order: {pkg.display_order ?? 0}</span>
-                                                    {pkg.includes_softfile && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Softfile</span>}
-                                                    {pkg.includes_prints && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Prints</span>}
-                                                    {pkg.includes_qr_code && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">QR Code</span>}
-                                                    {pkg.includes_gif && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">GIF</span>}
-                                                    {pkg.includes_custom_template && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Custom Template</span>}
-                                                    {pkg.includes_supporting_crew && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Supporting Crew</span>}
-                                                    {pkg.includes_tiket_antrian && <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Tiket Antrian</span>}
-                                                </div>
-                                                <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-semibold ${pkg.is_active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                                    {pkg.is_active ? 'Active' : 'Inactive'}
-                                                </span>
-                                                </div>
-                                                <div className="flex justify-end space-x-2 pt-4 border-t border-beige mt-4">
-                                                    <button onClick={() => handleEditPackage(pkg)} className="p-2 text-primary hover:bg-primary-50 rounded-full"><Edit2 size={14} /></button>
-                                                    <button onClick={() => handleDeletePackage(pkg.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full"><Trash2 size={14} /></button>
-                                                </div>
-                                            </div>
-                                        ))}
                                     </div>
-                                </div>
-                            )}
-
-                            {/* SUB TAB: PACKAGE VARIANTS */}
-                            {configSubTab === 'variants' && (
-                                <div className="space-y-8">
-                                    <form onSubmit={handleVariantSubmit} className="space-y-4 bg-off-white/50 p-6 rounded-2xl border border-beige">
-                                        <h3 className="font-serif text-md text-charcoal mb-2">{isEditingVariant ? 'Edit Varian Paket' : 'Tambah Varian Paket Baru'}</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Service Package *</label>
-                                                <select required value={variantForm.service_package_id} onChange={e => setVariantForm({ ...variantForm, service_package_id: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm">
-                                                    <option value="">-- Pilih Paket Jasa --</option>
-                                                    {packages.map(p => (
-                                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Variant Name *</label>
-                                                <input type="text" required placeholder="e.g. 3 Jam Unlimited" value={variantForm.name} onChange={e => setVariantForm({ ...variantForm, name: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Price (IDR) *</label>
-                                                <input type="number" required placeholder="e.g. 2500000" value={variantForm.price} onChange={e => setVariantForm({ ...variantForm, price: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Duration (Hours)</label>
-                                                <input type="number" placeholder="Optional" value={variantForm.duration_hours} onChange={e => setVariantForm({ ...variantForm, duration_hours: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Print Limit</label>
-                                                <input type="number" placeholder="Optional" value={variantForm.print_limit} onChange={e => setVariantForm({ ...variantForm, print_limit: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Extra Hour Price (IDR)</label>
-                                                <input type="number" placeholder="Optional" value={variantForm.extra_hour_price} onChange={e => setVariantForm({ ...variantForm, extra_hour_price: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div className="flex items-center space-x-2 pt-6">
-                                                <input type="checkbox" id="v_unlimited" checked={variantForm.is_unlimited} onChange={e => setVariantForm({ ...variantForm, is_unlimited: e.target.checked })} />
-                                                <label htmlFor="v_unlimited" className="text-xs font-semibold text-charcoal">Unlimited Print</label>
-                                            </div>
-                                        </div>
-                                        <div className="flex justify-end space-x-2 pt-2">
-                                            {isEditingVariant && (
-                                                <button type="button" onClick={() => { setIsEditingVariant(false); setVariantForm({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', is_unlimited: false }); }} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-slate rounded-lg text-xs font-semibold">Cancel</button>
-                                            )}
-                                            <button type="submit" className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg text-xs font-semibold shadow-md shadow-primary/10">
-                                                <span>{isEditingVariant ? 'Update Varian' : 'Simpan Varian'}</span>
-                                            </button>
-                                        </div>
-                                    </form>
-
-                                    <h3 className="font-serif text-lg text-charcoal mb-4">Varian Terdaftar:</h3>
-                                    <div className="space-y-4">
-                                        {packages.map(p => (
-                                            <div key={p.id} className="border border-beige rounded-2xl p-5 bg-white">
-                                                <h4 className="font-serif text-md text-primary font-semibold border-b border-beige pb-2 mb-3">{p.name} Variants:</h4>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                    {p.package_variants?.map(v => (
-                                                        <div key={v.id} className="p-4 border border-beige rounded-xl bg-off-white/40 flex flex-col justify-between">
-                                                            <div>
-                                                                <h5 className="font-medium text-charcoal text-sm">{v.name}</h5>
-                                                                <p className="text-lg font-serif text-primary mt-1">Rp {Number(v.price).toLocaleString('id-ID')}</p>
-                                                                <p className="text-xs text-slate mt-2">
-                                                                    Operational: {v.duration_hours ? `${v.duration_hours} Jam` : '-'} | Limit: {v.print_limit ? `${v.print_limit} Lembar` : (v.is_unlimited ? 'Unlimited' : '-')}
-                                                                </p>
-                                                            </div>
-                                                            <div className="flex justify-end space-x-2 pt-3 border-t border-beige/60 mt-3">
-                                                                <button onClick={() => handleEditVariant(v)} className="p-1.5 text-primary hover:bg-primary-50 rounded-full"><Edit2 size={12} /></button>
-                                                                <button onClick={() => handleDeleteVariant(v.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-full"><Trash2 size={12} /></button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                    {(!p.package_variants || p.package_variants.length === 0) && (
-                                                        <p className="text-xs text-warm-grey italic">Belum ada varian ditambahkan.</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* SUB TAB: ADDONS */}
-                            {configSubTab === 'addons' && (
-                                <div className="space-y-8">
-                                    <form onSubmit={handleAddonSubmit} className="space-y-4 bg-off-white/50 p-6 rounded-2xl border border-beige">
-                                        <h3 className="font-serif text-md text-charcoal mb-2">{isEditingAddon ? 'Edit Addon' : 'Tambah Addon Baru'}</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Addon Name</label>
-                                                <input type="text" required placeholder="e.g. Custom Backdrop" value={addonForm.name} onChange={e => setAddonForm({ ...addonForm, name: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Price (IDR)</label>
-                                                <input type="number" required placeholder="e.g. 500000" value={addonForm.price} onChange={e => setAddonForm({ ...addonForm, price: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Display Order</label>
-                                                <input type="number" min="0" value={addonForm.display_order} onChange={e => setAddonForm({ ...addonForm, display_order: Number(e.target.value) })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div className="flex items-center space-x-2 pt-6">
-                                                <input type="checkbox" id="add_active" checked={addonForm.is_active} onChange={e => setAddonForm({ ...addonForm, is_active: e.target.checked })} />
-                                                <label htmlFor="add_active" className="text-xs font-semibold text-charcoal">Addon Active</label>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-charcoal mb-1">Description</label>
-                                            <textarea required placeholder="Keychain acrylic custom design, extra photographer assistant..." value={addonForm.description} onChange={e => setAddonForm({ ...addonForm, description: e.target.value })}
-                                                className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm resize-none" rows="2" />
-                                        </div>
-                                        <div className="flex justify-end space-x-2 pt-2">
-                                            {isEditingAddon && (
-                                                <button type="button" onClick={() => { setIsEditingAddon(false); setAddonForm({ id: null, name: '', price: '', description: '', is_active: true }); }} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-slate rounded-lg text-xs font-semibold">Cancel</button>
-                                            )}
-                                            <button type="submit" className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg text-xs font-semibold shadow-md shadow-primary/10">
-                                                <span>{isEditingAddon ? 'Update Addon' : 'Simpan Addon'}</span>
-                                            </button>
-                                        </div>
-                                    </form>
-
-                                    <h3 className="font-serif text-lg text-charcoal mb-4">Daftar Addons Acara:</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {addons.map(add => (
-                                            <div key={add.id} className="border border-beige rounded-2xl p-5 bg-white flex flex-col justify-between hover:shadow-sm">
-                                                <div>
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h4 className="font-serif text-md text-charcoal font-semibold">{add.name}</h4>
-                                                        <p className="text-md font-serif text-primary">Rp {Number(add.price).toLocaleString('id-ID')}</p>
-                                                    </div>
-                                                    <p className="text-xs text-slate font-light leading-relaxed mb-4">{add.description}</p>
-                                                    <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-semibold ${add.is_active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                                        {add.is_active ? 'Active' : 'Inactive'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-end space-x-2 pt-4 border-t border-beige mt-4">
-                                                    <button onClick={() => handleEditAddon(add)} className="p-2 text-primary hover:bg-primary-50 rounded-full"><Edit2 size={14} /></button>
-                                                    <button onClick={() => handleDeleteAddon(add.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full"><Trash2 size={14} /></button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* SUB TAB: PHOTO TEMPLATES */}
-                            {configSubTab === 'templates' && (
-                                <div className="space-y-8">
-                                    <form onSubmit={handleTemplateSubmit} className="space-y-4 bg-off-white/50 p-6 rounded-2xl border border-beige">
-                                        <h3 className="font-serif text-md text-charcoal mb-2">{isEditingTemplate ? 'Edit Template Frame' : 'Tambah Template Frame Baru'}</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Template Name</label>
-                                                <input type="text" required placeholder="e.g. Classic Strip" value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Size (e.g. 4R, 2x6 strip)</label>
-                                                <input type="text" required placeholder="e.g. 4R" value={templateForm.size} onChange={e => setTemplateForm({ ...templateForm, size: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Display Order</label>
-                                                <input type="number" min="0" value={templateForm.display_order} onChange={e => setTemplateForm({ ...templateForm, display_order: Number(e.target.value) })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div className="flex items-center space-x-2 pt-6">
-                                                <input type="checkbox" id="temp_active" checked={templateForm.is_active} onChange={e => setTemplateForm({ ...templateForm, is_active: e.target.checked })} />
-                                                <label htmlFor="temp_active" className="text-xs font-semibold text-charcoal">Template Active</label>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Frame Style / Type</label>
-                                                <input type="text" placeholder="e.g. Vintage, Neon, Modern" value={templateForm.frame_type} onChange={e => setTemplateForm({ ...templateForm, frame_type: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-charcoal mb-1">Layout Grid Type</label>
-                                                <input type="text" placeholder="e.g. 3-Grid vertical, 4-Grid square" value={templateForm.layout_type} onChange={e => setTemplateForm({ ...templateForm, layout_type: e.target.value })}
-                                                    className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm" />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-charcoal mb-1">Description</label>
-                                            <textarea placeholder="Optional description for internal frame catalog" value={templateForm.description} onChange={e => setTemplateForm({ ...templateForm, description: e.target.value })}
-                                                className="w-full px-4 py-2 border border-beige bg-white rounded-xl focus:outline-none text-sm resize-none" rows="2" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-charcoal mb-1">Frame Image (JPG, PNG, WEBP)</label>
-                                            <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={e => {
-                                                const file = e.target.files?.[0];
-                                                setTemplateForm({ ...templateForm, frame_image: file });
-                                            }}
-                                                className="w-full text-xs text-slate" />
-                                        </div>
-                                        <div className="flex justify-end space-x-2 pt-2">
-                                            {isEditingTemplate && (
-                                                <button type="button" onClick={() => { setIsEditingTemplate(false); setTemplateForm({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', is_active: true }); }} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-slate rounded-lg text-xs font-semibold">Cancel</button>
-                                            )}
-                                            <button type="submit" className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg text-xs font-semibold shadow-md shadow-primary/10">
-                                                <span>{isEditingTemplate ? 'Update Template' : 'Simpan Template'}</span>
-                                            </button>
-                                        </div>
-                                    </form>
-
-                                    <h3 className="font-serif text-lg text-charcoal mb-4">Daftar Layout Frame Foto:</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {templates.map(t => (
-                                            <div key={t.id} className="border border-beige rounded-2xl p-5 bg-white flex flex-col justify-between hover:shadow-sm">
-                                                <div>
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h4 className="font-serif text-md text-charcoal font-semibold">{t.name}</h4>
-                                                        <span className="text-xs text-warm-grey">Size: {t.size}</span>
-                                                    </div>
-                                                    <p className="text-xs text-slate mt-1">Gaya Frame: {t.frame_type || '-'}</p>
-                                                    <p className="text-xs text-slate mt-1 mb-4">Grid Layout: {t.layout_type || '-'}</p>
-                                                    <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-semibold ${t.is_active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                                        {t.is_active ? 'Active' : 'Inactive'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-end space-x-2 pt-4 border-t border-beige mt-4">
-                                                    <button onClick={() => handleEditTemplate(t)} className="p-2 text-primary hover:bg-primary-50 rounded-full"><Edit2 size={14} /></button>
-                                                    <button onClick={() => handleDeleteTemplate(t.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full"><Trash2 size={14} /></button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                                ))}
+                            </div>
                         </div>
+                    )}
+                </div>
+
+                {/* Bottom Actions */}
+                <div className="sticky bottom-0 bg-white border-t border-beige p-4 flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                    {item.status === 'pending_approval' && (
+                        <>
+                            <button onClick={() => isB ? handleApprove(item.id) : handleRentalApprove(item.id)} className="flex-1 bg-primary hover:bg-primary-dark text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">Approve</button>
+                            <button onClick={() => isB ? handleReject(item.id) : handleRentalReject(item.id)} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-2.5 rounded-xl text-sm font-semibold transition-colors">Reject</button>
+                        </>
+                    )}
+                    {item.status === 'confirmed' && (!isB ? item.payment_status === 'paid' : true) && (
+                        <button onClick={() => handleComplete(item.id, selectedType)} className="flex-1 bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">Mark as Completed</button>
+                    )}
+                    {['waiting_dp', 'confirmed'].includes(item.status) && (
+                        <button onClick={() => handleCancel(item.id, selectedType)} className="w-auto px-4 bg-red-50 hover:bg-red-100 text-red-600 py-2.5 rounded-xl text-sm font-semibold transition-colors"><Trash2 size={18} /></button>
                     )}
                 </div>
             </div>
+        );
+    };
+
+    return (
+        <div className="min-h-screen bg-[#F8F9FC] font-sans text-charcoal flex">
+            {/* Sidebar */}
+            <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-beige z-30 flex flex-col">
+                <div className="h-16 flex items-center px-6 border-b border-beige">
+                    <img src="/images/logo.png" alt="Logo" className="w-8 h-8 rounded-full mr-3" onError={e=>e.target.style.display='none'} />
+                    <h1 className="font-serif text-lg font-bold text-charcoal tracking-tight">Memoforia Admin</h1>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                    <div>
+                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-warm-grey mb-2">Booking Management</p>
+                        <div className="space-y-1">
+                            {navBtn('bookings', 'Booking Approvals', stats.pending_bookings)}
+                            {navBtn('calendar', 'Calendar Blocks', 0)}
+                        </div>
+                    </div>
+                    <div>
+                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-warm-grey mb-2">Rental Management</p>
+                        <div className="space-y-1">
+                            {navBtn('rentals', 'Rental Approvals', stats.pending_rentals)}
+                        </div>
+                    </div>
+                    <div>
+                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-warm-grey mb-2">Master Data</p>
+                        <div className="space-y-1">
+                            {navBtn('config', 'Configuration CRUD', 0)}
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            {/* Main Content */}
+            <main className="ml-64 flex-1 flex flex-col min-w-0">
+                {/* Header */}
+                <header className="sticky top-0 h-16 bg-white/80 backdrop-blur-md border-b border-beige z-20 px-8 flex items-center justify-between">
+                    <h2 className="font-serif text-xl font-semibold capitalize text-charcoal">{activeTab.replace('_', ' ')}</h2>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm text-slate">Hi, <strong>{auth?.user?.name || 'Admin'}</strong></span>
+                        <button onClick={e => {e.preventDefault(); form.post('/logout')}} className="p-2 text-slate hover:bg-red-50 hover:text-red-600 rounded-full transition-colors"><LogOut size={18} /></button>
+                    </div>
+                </header>
+
+                {/* Notifications */}
+                {message.text && (
+                    <div className={`fixed top-20 right-8 z-50 px-6 py-3 rounded-xl border text-sm font-medium shadow-lg animate-in slide-in-from-top-2 ${message.type === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
+                        {message.text}
+                    </div>
+                )}
+
+                <div className="p-8 max-w-7xl mx-auto w-full">
+                    {/* Summary Cards */}
+                    <div className="flex flex-wrap gap-4 mb-8">
+                        <SummaryCard label="Pending Approval" value={stats.pending_bookings + stats.pending_rentals} sub="Bookings & Rentals" icon={AlertCircle} highlight={(stats.pending_bookings + stats.pending_rentals) > 0} loading={statsLoading} />
+                        <SummaryCard label="Active Events" value={stats.active_bookings} sub="Confirmed bookings" icon={Sparkles} loading={statsLoading} />
+                        <SummaryCard label="Pending Payments" value={stats.pending_payments} sub="Needs manual verification" icon={Clock} highlight={stats.pending_payments > 0} loading={statsLoading} />
+                        <SummaryCard label="Monthly Revenue" value={formatRp(stats.monthly_revenue)} sub="From verified payments" icon={TrendingUp} loading={statsLoading} />
+                    </div>
+
+                    {/* Tabs Content */}
+                    <div className="bg-white rounded-3xl shadow-sm border border-beige min-h-[500px]">
+                        
+                        {/* BOOKINGS & RENTALS TABLE */}
+                        {(activeTab === 'bookings' || activeTab === 'rentals') && (
+                            <div>
+                                <div className="px-6 py-5 border-b border-beige flex items-center justify-between">
+                                    <h3 className="font-serif text-lg font-semibold text-charcoal">{activeTab === 'bookings' ? 'Booking List' : 'Rental List'}</h3>
+                                    <select value={filter} onChange={e => setFilter(e.target.value)} className="px-4 py-2 border border-beige rounded-xl text-sm bg-off-white focus:outline-none focus:border-primary">
+                                        <option value="">All Statuses</option>
+                                        <option value="pending_approval">Pending Approval</option>
+                                        <option value="waiting_dp">Waiting DP</option>
+                                        <option value="confirmed">Confirmed</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </div>
+                                
+                                {loading ? (
+                                    <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={32} /></div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse whitespace-nowrap">
+                                            <thead>
+                                                <tr className="bg-off-white text-xs text-warm-grey font-bold uppercase tracking-wider border-b border-beige">
+                                                    <th className="px-6 py-4">Code</th>
+                                                    <th className="px-6 py-4">Customer</th>
+                                                    <th className="px-6 py-4">Date</th>
+                                                    <th className="px-6 py-4">Amount</th>
+                                                    <th className="px-6 py-4">Payment</th>
+                                                    <th className="px-6 py-4">Status</th>
+                                                    <th className="px-6 py-4 text-right">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-beige">
+                                                {(activeTab === 'bookings' ? bookings : rentals).map(item => {
+                                                    const isB = activeTab === 'bookings';
+                                                    const code = isB ? item.booking_code : item.rental_code;
+                                                    const date = isB ? (item.event_datetime || item.event_date) : `${item.start_date} - ${item.end_date}`;
+                                                    return (
+                                                        <tr key={item.id} onClick={() => { setSelectedItem(item); setSelectedType(activeTab === 'bookings' ? 'booking' : 'rental'); }} className="hover:bg-slate-50 cursor-pointer transition-colors group">
+                                                            <td className="px-6 py-4 text-sm font-semibold text-primary">{code}</td>
+                                                            <td className="px-6 py-4 text-sm text-charcoal">
+                                                                <p className="font-medium">{item.customer_name}</p>
+                                                                <p className="text-xs text-warm-grey">{item.customer_phone}</p>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-sm text-slate">{date}</td>
+                                                            <td className="px-6 py-4 text-sm font-semibold text-charcoal">{formatRp(item.total_price)}</td>
+                                                            <td className="px-6 py-4"><PaymentBadge status={item.payment_status} /></td>
+                                                            <td className="px-6 py-4"><StatusBadge status={item.status} /></td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                <button onClick={e => { e.stopPropagation(); setSelectedItem(item); setSelectedType(activeTab === 'bookings' ? 'booking' : 'rental'); }} className="p-2 text-primary hover:bg-primary/10 rounded-full opacity-0 group-hover:opacity-100 transition-all"><Eye size={18} /></button>
+                                                            </td>
+                                                        </tr>
+                                                    )
+                                                })}
+                                                {(activeTab === 'bookings' ? bookings : rentals).length === 0 && (
+                                                    <tr><td colSpan="7" className="px-6 py-12 text-center text-warm-grey">No records found.</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* CALENDAR BLOCKS */}
+                        {activeTab === 'calendar' && (
+                            <div className="p-6">
+                                <form onSubmit={handleBlockDateSubmit} className="flex flex-wrap gap-4 items-end bg-off-white p-6 rounded-2xl border border-beige mb-8">
+                                    <div className="flex-1 min-w-[200px]">
+                                        <label className="block text-xs font-bold text-warm-grey uppercase mb-2">Select Date</label>
+                                        <input type="date" required value={blockForm.date} onChange={e => setBlockForm({...blockForm, date: e.target.value})} className="w-full px-4 py-2 border border-beige rounded-xl text-sm" />
+                                    </div>
+                                    <div className="flex-1 min-w-[200px]">
+                                        <label className="block text-xs font-bold text-warm-grey uppercase mb-2">Reason</label>
+                                        <input type="text" required placeholder="Maintenance..." value={blockForm.reason} onChange={e => setBlockForm({...blockForm, reason: e.target.value})} className="w-full px-4 py-2 border border-beige rounded-xl text-sm" />
+                                    </div>
+                                    <button type="submit" className="px-6 py-2 bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl text-sm">Block Date</button>
+                                </form>
+                                <table className="w-full text-left border-collapse">
+                                    <thead><tr className="bg-off-white text-xs text-warm-grey font-bold uppercase border-b border-beige"><th className="px-6 py-3">Date</th><th className="px-6 py-3">Reason</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
+                                    <tbody className="divide-y divide-beige">
+                                        {blockedDates.map(b => (
+                                            <tr key={b.id} className="hover:bg-slate-50">
+                                                <td className="px-6 py-4 font-semibold">{b.date}</td><td className="px-6 py-4 text-slate">{b.reason}</td>
+                                                <td className="px-6 py-4 text-right"><button onClick={()=>handleUnblockDate(b.date)} className="text-red-500 hover:bg-red-50 p-2 rounded-full"><Trash2 size={16}/></button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* CONFIGURATION */}
+                        {activeTab === 'config' && (
+                            <div>
+                                <div className="flex px-6 border-b border-beige">
+                                    {['packages', 'variants', 'addons', 'templates'].map(sub => (
+                                        <button key={sub} onClick={() => setConfigSubTab(sub)} className={`px-6 py-4 text-sm font-semibold uppercase tracking-wider border-b-2 transition-colors ${configSubTab === sub ? 'border-primary text-primary' : 'border-transparent text-warm-grey hover:text-charcoal'}`}>{sub}</button>
+                                    ))}
+                                </div>
+                                <div className="p-6">
+                                    {/* Packages */}
+                                    {configSubTab === 'packages' && (
+                                        <div className="space-y-8">
+                                            <form onSubmit={e => handleForm(e, 'service-packages', packageForm, setPackageForm, packageForm.id!=null, v=>{}, loadPackages)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div className="md:col-span-3 mb-2 flex items-center justify-between"><h4 className="font-serif font-semibold">{packageForm.id ? 'Edit Package' : 'New Package'}</h4>{packageForm.id && <button type="button" onClick={()=>setPackageForm({id:null, name:'', category:'soft_file', description:'', is_active:true, display_order:0})} className="text-xs text-warm-grey underline">Cancel Edit</button>}</div>
+                                                <input type="text" required placeholder="Name" value={packageForm.name} onChange={e=>setPackageForm({...packageForm, name: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <select required value={packageForm.category} onChange={e=>setPackageForm({...packageForm, category: e.target.value})} className="px-4 py-2 border rounded-xl text-sm"><option value="soft_file">Soft File</option><option value="unlimited_print">Unlimited Print</option><option value="limited_print">Limited Print</option></select>
+                                                <input type="number" placeholder="Order" value={packageForm.display_order} onChange={e=>setPackageForm({...packageForm, display_order: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <textarea required placeholder="Description" value={packageForm.description} onChange={e=>setPackageForm({...packageForm, description: e.target.value})} className="md:col-span-3 px-4 py-2 border rounded-xl text-sm" rows="2" />
+                                                <div className="md:col-span-3 flex justify-end"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
+                                            </form>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {packages.map(p => (
+                                                    <div key={p.id} className="p-4 border rounded-xl flex justify-between items-start">
+                                                        <div><h5 className="font-bold">{p.name}</h5><p className="text-xs text-warm-grey">{p.category}</p></div>
+                                                        <div className="flex gap-2"><button onClick={()=>setPackageForm(p)} className="p-1.5 text-primary bg-primary/10 rounded"><Edit2 size={14}/></button><button onClick={()=>del(`/admin/api/service-packages/${p.id}`, loadPackages)} className="p-1.5 text-red-500 bg-red-50 rounded"><Trash2 size={14}/></button></div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {/* Variants */}
+                                    {configSubTab === 'variants' && (
+                                        <div className="space-y-8">
+                                            <form onSubmit={e => handleForm(e, 'package-variants', variantForm, setVariantForm, variantForm.id!=null, v=>{}, loadPackages)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div className="md:col-span-3 mb-2"><h4 className="font-serif font-semibold">Variant Management</h4></div>
+                                                <select required value={variantForm.service_package_id} onChange={e=>setVariantForm({...variantForm, service_package_id: e.target.value})} className="px-4 py-2 border rounded-xl text-sm"><option value="">Select Package</option>{packages.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                                <input type="text" required placeholder="Variant Name" value={variantForm.name} onChange={e=>setVariantForm({...variantForm, name: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <input type="number" required placeholder="Price" value={variantForm.price} onChange={e=>setVariantForm({...variantForm, price: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <div className="md:col-span-3 flex justify-end"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
+                                            </form>
+                                        </div>
+                                    )}
+                                    {/* Addons */}
+                                    {configSubTab === 'addons' && (
+                                        <div className="space-y-8">
+                                            <form onSubmit={e => handleForm(e, 'addons', addonForm, setAddonForm, addonForm.id!=null, v=>{}, loadAddons)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="md:col-span-2 mb-2"><h4 className="font-serif font-semibold">Addons Management</h4></div>
+                                                <input type="text" required placeholder="Addon Name" value={addonForm.name} onChange={e=>setAddonForm({...addonForm, name: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <input type="number" required placeholder="Price" value={addonForm.price} onChange={e=>setAddonForm({...addonForm, price: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <div className="md:col-span-2 flex justify-end"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
+                                            </form>
+                                        </div>
+                                    )}
+                                    {/* Templates */}
+                                    {configSubTab === 'templates' && (
+                                        <div className="space-y-8">
+                                            <form onSubmit={handleTemplateSubmit} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="md:col-span-2 mb-2"><h4 className="font-serif font-semibold">Template Frames</h4></div>
+                                                <input type="text" required placeholder="Name" value={templateForm.name} onChange={e=>setTemplateForm({...templateForm, name: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <input type="file" onChange={e=>setTemplateForm({...templateForm, frame_image: e.target.files?.[0]})} className="px-4 py-2 border rounded-xl text-sm bg-white" />
+                                                <div className="md:col-span-2 flex justify-end"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
+                                            </form>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </main>
+
+            {/* Overlays */}
+            {selectedItem && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30" onClick={() => setSelectedItem(null)} />}
+            <DetailPanel />
+            <RejectModal open={rejectModal.open} onConfirm={doReject} onClose={() => setRejectModal({open: false})} />
         </div>
     );
 }
