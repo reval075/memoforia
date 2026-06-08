@@ -260,7 +260,7 @@ class MemoforiaDummyDataSeeder extends Seeder
                 'size'          => '3.5x4.25',
                 'frame_type'    => 'Polaroid',
                 'layout_type'   => 'Single with Caption',
-                'preview_image' => null,
+                'preview_image' => '/images/templates/template-06.png',
             ],
         ];
 
