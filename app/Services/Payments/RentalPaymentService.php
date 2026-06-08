@@ -9,6 +9,7 @@ use App\Services\MidtransService;
 use App\Support\DpAmountCalculator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class RentalPaymentService
 {
@@ -365,7 +366,7 @@ class RentalPaymentService
 
         $uploadCapabilities = $this->resolveUploadCapabilities($rental);
 
-        return [
+        $payload = [
             'id'                    => $rental->id,
             'rental_code'           => $rental->rental_code,
             'customer_name'         => $rental->customer_name,
@@ -413,6 +414,18 @@ class RentalPaymentService
                 'verified_at'         => $p->verified_at?->toIso8601String(),
             ])->toArray(),
         ];
+
+        Log::info('[RentalPaymentService] Tracking payload', [
+            'rental_id'      => $rental->id,
+            'rental_code'    => $rental->rental_code,
+            'status'         => $rental->status,
+            'payment_status' => $rental->payment_status,
+            'snap_token'     => $rental->payments->where('status', 'pending')->first()?->snap_token,
+            'paid_amount'    => $paidAmount,
+            'remaining'      => $remainingAmount,
+        ]);
+
+        return $payload;
     }
 
     /**

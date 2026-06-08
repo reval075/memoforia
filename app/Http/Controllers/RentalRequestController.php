@@ -9,6 +9,7 @@ use App\Models\RentalEquipment;
 use App\Services\Payments\RentalPaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 
@@ -43,7 +44,6 @@ class RentalRequestController extends Controller
                 'start_date'     => $validated['start_date'],
                 'end_date'       => $validated['end_date'],
                 'notes'          => $validated['notes'] ?? null,
-                'status'         => 'pending_approval',
                 'payment_status' => 'unpaid',
                 'total_price'    => 0,
             ]);
@@ -51,24 +51,43 @@ class RentalRequestController extends Controller
             foreach ($validated['items'] as $item) {
                 $equipment = RentalEquipment::findOrFail($item['equipment_id']);
 
-                // Determine requested range and blocking window (end_date + 2 days)
                 $requestedStart = $startDate->toDateString();
-                $requestedEndPlus2 = $endDate->copy()->addDays(2)->toDateString();
+                $requestedEnd   = $endDate->toDateString();
 
-                // Sum quantities already reserved on overlapping rentals
-                $reservedQty = \DB::table('rental_items')
+                // -------------------------------------------------------
+                // Hitung stok yang sudah direservasi pada rentang overlap.
+                // Logika IDENTIK dengan RentalEquipmentController@index.
+                // Rental aktif = belum completed, belum cancelled,
+                //                 DP belum expired, dan bukan rejected.
+                // -------------------------------------------------------
+                $reservedQty = DB::table('rental_items')
                     ->join('rental_requests', 'rental_items.rental_request_id', '=', 'rental_requests.id')
                     ->where('rental_items.equipment_id', $equipment->id)
-                    ->whereIn('rental_requests.status', ['waiting_dp', 'confirmed'])
-                    ->where(function ($q) use ($requestedStart, $requestedEndPlus2) {
-                        // overlap where existing.start_date <= requestedEndPlus2 AND existing.end_date +2 >= requestedStart
-                        $q->whereRaw("rental_requests.start_date <= ?", [$requestedEndPlus2])
-                          ->whereRaw("DATE_ADD(rental_requests.end_date, INTERVAL 2 DAY) >= ?", [$requestedStart]);
+                    ->whereNull('rental_requests.completed_at')
+                    ->whereNull('rental_requests.cancelled_at')
+                    ->where(function ($q) {
+                        $q->whereNull('rental_requests.dp_expired_at')
+                          ->orWhere('rental_requests.dp_expired_at', '>', now());
                     })
-                    ->selectRaw('COALESCE(SUM(rental_items.qty),0) as sum')
+                    ->where('rental_requests.status', '!=', 'rejected')
+                    // Overlap: existing.start <= requested.end AND existing.end >= requested.start
+                    ->where('rental_requests.start_date', '<=', $requestedEnd)
+                    ->where('rental_requests.end_date', '>=', $requestedStart)
+                    ->selectRaw('COALESCE(SUM(rental_items.qty), 0) as sum')
                     ->value('sum');
 
                 $available = max(0, $equipment->stock - (int) $reservedQty);
+
+                Log::info('[RentalRequest] Stock validation', [
+                    'equipment_id'   => $equipment->id,
+                    'equipment_name' => $equipment->name,
+                    'stock'          => $equipment->stock,
+                    'reserved'       => (int) $reservedQty,
+                    'available'      => $available,
+                    'requested'      => $item['qty'],
+                    'start_date'     => $requestedStart,
+                    'end_date'       => $requestedEnd,
+                ]);
 
                 if ($available < $item['qty']) {
                     throw new \Exception("Stok untuk {$equipment->name} tidak mencukupi pada rentang tanggal yang dipilih. Tersedia: {$available}");
@@ -277,7 +296,18 @@ class RentalRequestController extends Controller
                     'dp_expired_at' => $dpExpiredAt,
                 ]);
 
-                return $rental->fresh();
+                $rental = $rental->fresh();
+
+                Log::info('[RentalRequest] Approved', [
+                    'id'             => $rental->id,
+                    'rental_code'    => $rental->rental_code,
+                    'status'         => $rental->status,
+                    'payment_status' => $rental->payment_status,
+                    'approved_at'    => $rental->approved_at?->toIso8601String(),
+                    'dp_expired_at'  => $rental->dp_expired_at?->toIso8601String(),
+                ]);
+
+                return $rental;
             });
 
             return response()->json([
