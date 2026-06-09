@@ -16,6 +16,7 @@ class PackageVariant extends Model
         'print_limit',
         'price',
         'extra_hour_price',
+        'extra_print_price',
         'is_unlimited',
     ];
 

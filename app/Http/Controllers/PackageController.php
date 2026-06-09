@@ -124,6 +124,7 @@ class PackageController extends Controller
             'duration_hours' => 'nullable|integer|min:1',
             'print_limit' => 'nullable|integer|min:1',
             'extra_hour_price' => 'nullable|numeric|min:0',
+            'extra_print_price' => 'nullable|numeric|min:0',
             'is_unlimited' => 'nullable|boolean',
         ]);
 
@@ -148,6 +149,7 @@ class PackageController extends Controller
             'duration_hours' => 'nullable|integer|min:1',
             'print_limit' => 'nullable|integer|min:1',
             'extra_hour_price' => 'nullable|numeric|min:0',
+            'extra_print_price' => 'nullable|numeric|min:0',
             'is_unlimited' => 'nullable|boolean',
         ]);
 

@@ -351,7 +351,7 @@ export default function Booking({ initialDate = null }) {
     // Compute the variant with the highest duration_hours for this package (for Extra Hour eligibility)
     const maxDurationVariant = useMemo(() => {
         if (!selectedPackage) return null;
-        const variants = (selectedPackage.package_variants || []).filter(v => v.duration_hours != null);
+        const variants = (selectedPackage.package_variants || []).filter(v => v.is_unlimited && v.duration_hours != null);
         if (variants.length === 0) return null;
         return variants.reduce((best, v) =>
             Number(v.duration_hours) > Number(best.duration_hours) ? v : best
@@ -368,31 +368,24 @@ export default function Booking({ initialDate = null }) {
         );
     }, [selectedPackage]);
 
-    // Whether selected variant qualifies for Extra Hour counter
-    const isMaxDurationSelected = !!(selectedVariant &&
-        maxDurationVariant &&
-        selectedVariant.id === maxDurationVariant.id &&
-        Number(selectedVariant.extra_hour_price) > 0
-    );
+    // Extra Hour is available if the variant is unlimited, has an extra_hour_price set, AND is the max duration variant
+    const isExtraHourAvailable = !!(selectedVariant && selectedVariant.is_unlimited && Number(selectedVariant.extra_hour_price) > 0 && maxDurationVariant && selectedVariant.id === maxDurationVariant.id);
 
-    // Whether selected variant qualifies for Extra Prints counter
-    const isMaxPrintLimitSelected = !!(selectedVariant &&
-        maxPrintLimitVariant &&
-        selectedVariant.id === maxPrintLimitVariant.id
-    );
+    // Extra Print is available if the variant is limited, has an extra_print_price set, AND is the max print limit variant
+    const isExtraPrintAvailable = !!(selectedVariant && !selectedVariant.is_unlimited && Number(selectedVariant.extra_print_price) > 0 && maxPrintLimitVariant && selectedVariant.id === maxPrintLimitVariant.id);
 
     // Calculate dynamic total price on frontend
     const calculateTotalPrice = () => {
         let price = selectedVariant ? Number(selectedVariant.price) : 0;
 
         // Extra Hours cost (price per hour from selected variant DB field)
-        if (form.extra_hours > 0 && selectedVariant?.extra_hour_price) {
+        if (form.extra_hours > 0 && selectedVariant?.extra_hour_price && isExtraHourAvailable) {
             price += form.extra_hours * Number(selectedVariant.extra_hour_price);
         }
 
-        // Extra Prints cost (500k per 50 prints)
-        if (form.extra_prints > 0) {
-            price += (form.extra_prints / 50) * 500000;
+        // Extra Prints cost (calculated per 50 prints, but price comes from DB extra_print_price per 50 prints)
+        if (form.extra_prints > 0 && selectedVariant?.extra_print_price && isExtraPrintAvailable) {
+            price += (form.extra_prints / 50) * Number(selectedVariant.extra_print_price);
         }
 
         Object.entries(selectedAddons).forEach(([addonId, qty]) => {
@@ -903,13 +896,16 @@ export default function Booking({ initialDate = null }) {
                                                     const isSelected = form.package_variant_id == variant.id;
                                                     const desc = getVariantDescription(variant);
 
-                                                    // Extra Hour: only for selected variant with max duration_hours AND has extra_hour_price
+                                                    // Extra Hour: only for selected unlimited variant that has an extra_hour_price and is the max duration variant
                                                     const showExtraHour = isSelected &&
-                                                        maxDurationVariant?.id === variant.id &&
-                                                        Number(variant.extra_hour_price) > 0;
+                                                        variant.is_unlimited &&
+                                                        Number(variant.extra_hour_price) > 0 &&
+                                                        maxDurationVariant?.id === variant.id;
 
-                                                    // Extra Prints: only for selected variant with max print_limit (limited variants only)
+                                                    // Extra Prints: only for selected limited variant that has an extra_print_price and is the max print limit variant
                                                     const showExtraPrints = isSelected &&
+                                                        !variant.is_unlimited &&
+                                                        Number(variant.extra_print_price) > 0 &&
                                                         maxPrintLimitVariant?.id === variant.id;
 
                                                     return (
@@ -1001,7 +997,7 @@ export default function Booking({ initialDate = null }) {
                                                                 </div>
                                                             )}
 
-                                                            {/* Extra Prints Counter — only for max-print-limit limited variant */}
+                                                            {/* Extra Prints Counter — only for selected limited variant */}
                                                             {showExtraPrints && (
                                                                 <div
                                                                     className="mt-4 p-4 rounded-2xl bg-amber-50/60 border border-amber-200/60"
@@ -1009,7 +1005,7 @@ export default function Booking({ initialDate = null }) {
                                                                 >
                                                                     <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700/80 mb-2">Tambah Cetakan</p>
                                                                     <p className="text-xs text-warm-grey mb-3">
-                                                                        +Rp 500.000 per 50 lembar cetak tambahan
+                                                                        +Rp {Number(variant.extra_print_price).toLocaleString('id-ID')} per 50 lembar cetak tambahan
                                                                     </p>
                                                                     <div className="flex items-center gap-3">
                                                                         <button
@@ -1025,7 +1021,7 @@ export default function Booking({ initialDate = null }) {
                                                                         >+</button>
                                                                         <span className="text-sm text-slate font-light">
                                                                             {form.extra_prints > 0
-                                                                                ? `+${form.extra_prints} lembar (+Rp ${((form.extra_prints / 50) * 500000).toLocaleString('id-ID')})`
+                                                                                ? `+${form.extra_prints} lembar (+Rp ${((form.extra_prints / 50) * Number(variant.extra_print_price)).toLocaleString('id-ID')})`
                                                                                 : 'Tidak ada tambahan cetakan'}
                                                                         </span>
                                                                     </div>
@@ -1353,7 +1349,7 @@ export default function Booking({ initialDate = null }) {
                                     </div>
 
                                     {/* Extra Hour row */}
-                                    {isMaxDurationSelected && form.extra_hours > 0 && (
+                                    {isExtraHourAvailable && form.extra_hours > 0 && (
                                         <div className="flex justify-between border-b border-primary-100/50 pb-2.5 text-sm">
                                             <span className="text-slate font-light">Tambah Durasi (+{form.extra_hours} jam)</span>
                                             <span className="font-semibold text-charcoal">
@@ -1363,11 +1359,11 @@ export default function Booking({ initialDate = null }) {
                                     )}
 
                                     {/* Extra Prints row */}
-                                    {isMaxPrintLimitSelected && form.extra_prints > 0 && (
+                                    {isExtraPrintAvailable && form.extra_prints > 0 && (
                                         <div className="flex justify-between border-b border-primary-100/50 pb-2.5 text-sm">
                                             <span className="text-slate font-light">Tambah Cetakan (+{form.extra_prints} lembar)</span>
                                             <span className="font-semibold text-charcoal">
-                                                +Rp {((form.extra_prints / 50) * 500000).toLocaleString('id-ID')}
+                                                +Rp {((form.extra_prints / 50) * Number(selectedVariant?.extra_print_price || 0)).toLocaleString('id-ID')}
                                             </span>
                                         </div>
                                     )}

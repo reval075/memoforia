@@ -89,10 +89,10 @@ export default function Dashboard() {
 
     // Forms
     const [blockForm, setBlockForm] = useState({ date: '', reason: '' });
-    const [packageForm, setPackageForm] = useState({ id: null, name: '', category: 'soft_file', description: '', is_active: true, display_order: 0, includes_softfile: false, includes_prints: false, includes_qr_code: false, includes_gif: false, includes_custom_template: false, includes_supporting_crew: false, includes_tiket_antrian: false });
-    const [variantForm, setVariantForm] = useState({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', is_unlimited: false });
+    const [packageForm, setPackageForm] = useState({ id: null, name: '', description: '', category: 'general', is_active: true, display_order: 0 });
+    const [variantForm, setVariantForm] = useState({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', extra_print_price: '', variant_category: 'unlimited', is_unlimited: true });
     const [addonForm, setAddonForm] = useState({ id: null, name: '', price: '', description: '', is_active: true, display_order: 0 });
-    const [templateForm, setTemplateForm] = useState({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', description: '', is_active: true, display_order: 0 });
+    const [templateForm, setTemplateForm] = useState({ id: null, name: '', size: '4R', is_active: true, display_order: 0 });
 
     const showMsg = (text, type = 'success') => { setMessage({ text, type }); setTimeout(() => setMessage({ text: '', type: '' }), 5000); };
     
@@ -164,7 +164,6 @@ export default function Dashboard() {
         Object.entries(templateForm).forEach(([k, v]) => {
             if (v == null) return;
             if (v instanceof File) { fd.append(k, v); return; }
-            // FormData converts booleans to "true"/"false" — Laravel requires 1/0
             if (typeof v === 'boolean') { fd.append(k, v ? '1' : '0'); return; }
             fd.append(k, v);
         });
@@ -172,7 +171,7 @@ export default function Dashboard() {
         axios.post(url, fd, { headers: { 'Content-Type': 'multipart/form-data' }, params: templateForm.id ? { _method: 'PUT' } : {} })
             .then(r => {
                 showMsg(r.data.message);
-                setTemplateForm({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', description: '', is_active: true, display_order: 0 });
+                setTemplateForm({ id: null, name: '', size: '4R', is_active: true, display_order: 0 });
                 loadTemplates();
             }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error'));
     };
@@ -507,19 +506,26 @@ export default function Dashboard() {
                                     {/* Packages */}
                                     {configSubTab === 'packages' && (
                                         <div className="space-y-8">
-                                            <form onSubmit={e => handleForm(e, 'service-packages', packageForm, setPackageForm, packageForm.id!=null, v=>{}, loadPackages)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="md:col-span-3 mb-2 flex items-center justify-between"><h4 className="font-serif font-semibold">{packageForm.id ? 'Edit Package' : 'New Package'}</h4>{packageForm.id && <button type="button" onClick={()=>setPackageForm({id:null, name:'', category:'soft_file', description:'', is_active:true, display_order:0})} className="text-xs text-warm-grey underline">Cancel Edit</button>}</div>
-                                                <input type="text" required placeholder="Name" value={packageForm.name} onChange={e=>setPackageForm({...packageForm, name: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <select required value={packageForm.category} onChange={e=>setPackageForm({...packageForm, category: e.target.value})} className="px-4 py-2 border rounded-xl text-sm"><option value="soft_file">Soft File</option><option value="unlimited_print">Unlimited Print</option><option value="limited_print">Limited Print</option></select>
-                                                <input type="number" placeholder="Order" value={packageForm.display_order} onChange={e=>setPackageForm({...packageForm, display_order: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <textarea required placeholder="Description" value={packageForm.description} onChange={e=>setPackageForm({...packageForm, description: e.target.value})} className="md:col-span-3 px-4 py-2 border rounded-xl text-sm" rows="2" />
-                                                <div className="md:col-span-3 flex justify-end"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
+                                            <form onSubmit={e => handleForm(e, 'service-packages', packageForm, setPackageForm, packageForm.id!=null, v=>{}, loadPackages)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="md:col-span-2 mb-2 flex items-center justify-between"><h4 className="font-serif font-semibold">{packageForm.id ? 'Edit Package' : 'New Package'}</h4>{packageForm.id && <button type="button" onClick={()=>setPackageForm({id:null, name:'', description:'', category:'general', is_active:true, display_order:0})} className="text-xs text-warm-grey underline">Cancel Edit</button>}</div>
+                                                
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Package Name</label>
+                                                    <input type="text" required value={packageForm.name} onChange={e=>setPackageForm({...packageForm, name: e.target.value})} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                </div>
+                                                
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Description</label>
+                                                    <textarea required value={packageForm.description} onChange={e=>setPackageForm({...packageForm, description: e.target.value})} className="w-full px-4 py-2 border rounded-xl text-sm" rows="2" />
+                                                </div>
+
+                                                <div className="md:col-span-2 flex justify-end mt-2"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
                                             </form>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 {packages.map(p => (
-                                                    <div key={p.id} className="p-4 border rounded-xl flex justify-between items-start">
-                                                        <div><h5 className="font-bold">{p.name}</h5><p className="text-xs text-warm-grey">{p.category}</p></div>
-                                                        <div className="flex gap-2"><button onClick={()=>setPackageForm(p)} className="p-1.5 text-primary bg-primary/10 rounded"><Edit2 size={14}/></button><button onClick={()=>del(`/admin/api/service-packages/${p.id}`, loadPackages)} className="p-1.5 text-red-500 bg-red-50 rounded"><Trash2 size={14}/></button></div>
+                                                    <div key={p.id} className="p-4 border rounded-xl flex justify-between items-start bg-white">
+                                                        <div><h5 className="font-bold text-charcoal">{p.name}</h5><p className="text-xs text-warm-grey mt-1 line-clamp-2">{p.description}</p></div>
+                                                        <div className="flex gap-2 shrink-0"><button onClick={()=>setPackageForm({...p, category: p.category || 'general'})} className="p-1.5 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg"><Edit2 size={14}/></button><button onClick={()=>del(`/admin/api/service-packages/${p.id}`, loadPackages)} className="p-1.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg"><Trash2 size={14}/></button></div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -529,18 +535,65 @@ export default function Dashboard() {
                                     {configSubTab === 'variants' && (
                                         <div className="space-y-8">
                                             {/* Form */}
-                                            <form onSubmit={e => handleForm(e, 'package-variants', variantForm, setVariantForm, variantForm.id != null, v => {}, loadVariants)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="md:col-span-3 mb-2 flex items-center justify-between">
+                                            <form onSubmit={e => handleForm(e, 'package-variants', { ...variantForm, is_unlimited: variantForm.variant_category === 'unlimited', print_limit: variantForm.variant_category === 'unlimited' ? 0 : variantForm.print_limit, duration_hours: variantForm.variant_category === 'limited' ? 0 : variantForm.duration_hours, extra_hour_price: variantForm.variant_category === 'limited' ? 0 : variantForm.extra_hour_price, extra_print_price: variantForm.variant_category === 'unlimited' ? 0 : variantForm.extra_print_price }, setVariantForm, variantForm.id != null, v => {}, loadVariants)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="md:col-span-2 mb-2 flex items-center justify-between">
                                                     <h4 className="font-serif font-semibold">{variantForm.id ? 'Edit Variant' : 'New Variant'}</h4>
-                                                    {variantForm.id && <button type="button" onClick={() => setVariantForm({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', is_unlimited: false })} className="text-xs text-warm-grey underline">Cancel Edit</button>}
+                                                    {variantForm.id && <button type="button" onClick={() => setVariantForm({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', extra_print_price: '', variant_category: 'unlimited', is_unlimited: true })} className="text-xs text-warm-grey underline">Cancel Edit</button>}
                                                 </div>
-                                                <select required value={variantForm.service_package_id} onChange={e => setVariantForm({ ...variantForm, service_package_id: e.target.value })} className="px-4 py-2 border rounded-xl text-sm">
-                                                    <option value="">Select Package</option>
-                                                    {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                                </select>
-                                                <input type="text" required placeholder="Variant Name" value={variantForm.name} onChange={e => setVariantForm({ ...variantForm, name: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <input type="number" required placeholder="Price (Rp)" value={variantForm.price} onChange={e => setVariantForm({ ...variantForm, price: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <div className="md:col-span-3 flex justify-end">
+
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Package</label>
+                                                    <select required value={variantForm.service_package_id} onChange={e => setVariantForm({ ...variantForm, service_package_id: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm bg-white">
+                                                        <option value="">Pilih Package</option>
+                                                        {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Variant Name</label>
+                                                    <input type="text" required value={variantForm.name} onChange={e => setVariantForm({ ...variantForm, name: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Variant Category</label>
+                                                    <select required value={variantForm.variant_category} onChange={e => setVariantForm({ ...variantForm, variant_category: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm bg-white">
+                                                        <option value="unlimited">Unlimited Print</option>
+                                                        <option value="limited">Limited Print</option>
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Price (Rp)</label>
+                                                    <input type="number" required value={variantForm.price} onChange={e => setVariantForm({ ...variantForm, price: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                </div>
+
+                                                {variantForm.variant_category === 'unlimited' && (
+                                                    <>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Duration Hours</label>
+                                                            <input type="number" required value={variantForm.duration_hours} onChange={e => setVariantForm({ ...variantForm, duration_hours: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Extra Hour Price (Rp)</label>
+                                                            <input type="number" required value={variantForm.extra_hour_price} onChange={e => setVariantForm({ ...variantForm, extra_hour_price: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {variantForm.variant_category === 'limited' && (
+                                                    <>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Print Limit</label>
+                                                            <input type="number" required value={variantForm.print_limit} onChange={e => setVariantForm({ ...variantForm, print_limit: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Extra Print Price (Rp)</label>
+                                                            <input type="number" required value={variantForm.extra_print_price} onChange={e => setVariantForm({ ...variantForm, extra_print_price: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                <div className="md:col-span-2 flex justify-end mt-2">
                                                     <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save Variant</button>
                                                 </div>
                                             </form>
@@ -549,7 +602,7 @@ export default function Dashboard() {
                                             <div className="flex items-center gap-3">
                                                 <label className="text-xs font-bold text-warm-grey uppercase">Filter by Package:</label>
                                                 <select value={selectedPackageId} onChange={e => setSelectedPackageId(e.target.value)} className="px-4 py-2 border border-beige rounded-xl text-sm bg-white">
-                                                    <option value="">All Packages</option>
+                                                    <option value="">Semua Package</option>
                                                     {packages.map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
                                                 </select>
                                             </div>
@@ -560,7 +613,7 @@ export default function Dashboard() {
                                                     ? packageVariants.filter(v => String(v.service_package_id) === selectedPackageId)
                                                     : packageVariants
                                                 ).length === 0 ? (
-                                                    <p className="px-6 py-8 text-center text-warm-grey text-sm">Tidak ada variant ditemukan. Pilih package atau tambah variant baru.</p>
+                                                    <p className="px-6 py-8 text-center text-warm-grey text-sm">Pilih package pada filter di atas untuk melihat varian.</p>
                                                 ) : (
                                                     (selectedPackageId
                                                         ? packageVariants.filter(v => String(v.service_package_id) === selectedPackageId)
@@ -568,11 +621,11 @@ export default function Dashboard() {
                                                     ).map(v => (
                                                         <div key={v.id} className="flex items-center justify-between px-6 py-4 bg-white hover:bg-slate-50">
                                                             <div>
-                                                                <p className="font-semibold text-charcoal text-sm">{v.name}</p>
-                                                                <p className="text-xs text-warm-grey mt-0.5">{v.package_name} · {formatRp(v.price)}</p>
+                                                                <p className="font-semibold text-charcoal text-sm">{v.name} <span className="ml-2 px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate uppercase">{v.is_unlimited ? 'Unlimited' : 'Limited'}</span></p>
+                                                                <p className="text-xs text-warm-grey mt-0.5">{v.package_name} · Harga: {formatRp(v.price)} {v.is_unlimited ? `· ${v.duration_hours} Jam · Extra/jam: ${formatRp(v.extra_hour_price)}` : `· Limit: ${v.print_limit} · Extra/print: ${formatRp(v.extra_print_price)}`}</p>
                                                             </div>
-                                                            <div className="flex gap-2">
-                                                                <button onClick={() => setVariantForm({ id: v.id, service_package_id: String(v.service_package_id), name: v.name, price: v.price, duration_hours: v.duration_hours || '', print_limit: v.print_limit || '', extra_hour_price: v.extra_hour_price || '', is_unlimited: v.is_unlimited || false })} className="p-1.5 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors">
+                                                            <div className="flex gap-2 shrink-0">
+                                                                <button onClick={() => setVariantForm({ id: v.id, service_package_id: String(v.service_package_id), name: v.name, price: v.price, duration_hours: v.duration_hours || '', print_limit: v.print_limit || '', extra_hour_price: v.extra_hour_price || '', extra_print_price: v.extra_print_price || '', variant_category: v.is_unlimited ? 'unlimited' : 'limited', is_unlimited: v.is_unlimited || false })} className="p-1.5 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors">
                                                                     <Edit2 size={14} />
                                                                 </button>
                                                                 <button onClick={() => del(`/admin/api/package-variants/${v.id}`, loadVariants)} className="p-1.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
@@ -595,10 +648,23 @@ export default function Dashboard() {
                                                     <h4 className="font-serif font-semibold">{addonForm.id ? 'Edit Addon' : 'New Addon'}</h4>
                                                     {addonForm.id && <button type="button" onClick={() => setAddonForm({ id: null, name: '', price: '', description: '', is_active: true, display_order: 0 })} className="text-xs text-warm-grey underline">Cancel Edit</button>}
                                                 </div>
-                                                <input type="text" required placeholder="Addon Name" value={addonForm.name} onChange={e => setAddonForm({ ...addonForm, name: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <input type="number" required placeholder="Price (Rp)" value={addonForm.price} onChange={e => setAddonForm({ ...addonForm, price: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <textarea placeholder="Description (optional)" value={addonForm.description} onChange={e => setAddonForm({ ...addonForm, description: e.target.value })} className="md:col-span-2 px-4 py-2 border rounded-xl text-sm" rows="2" />
-                                                <div className="md:col-span-2 flex justify-end">
+                                                
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Addon Name</label>
+                                                    <input type="text" required value={addonForm.name} onChange={e => setAddonForm({ ...addonForm, name: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                </div>
+                                                
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Price (Rp)</label>
+                                                    <input type="number" required value={addonForm.price} onChange={e => setAddonForm({ ...addonForm, price: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                </div>
+                                                
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Description</label>
+                                                    <textarea value={addonForm.description} onChange={e => setAddonForm({ ...addonForm, description: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" rows="2" />
+                                                </div>
+                                                
+                                                <div className="md:col-span-2 flex justify-end mt-2">
                                                     <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save Addon</button>
                                                 </div>
                                             </form>
@@ -636,13 +702,25 @@ export default function Dashboard() {
                                             <form onSubmit={handleTemplateSubmit} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div className="md:col-span-2 mb-2 flex items-center justify-between">
                                                     <h4 className="font-serif font-semibold">{templateForm.id ? 'Edit Template' : 'New Template Frame'}</h4>
-                                                    {templateForm.id && <button type="button" onClick={() => setTemplateForm({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', description: '', is_active: true, display_order: 0 })} className="text-xs text-warm-grey underline">Cancel Edit</button>}
+                                                    {templateForm.id && <button type="button" onClick={() => setTemplateForm({ id: null, name: '', size: '4R', is_active: true, display_order: 0 })} className="text-xs text-warm-grey underline">Cancel Edit</button>}
                                                 </div>
-                                                <input type="text" required placeholder="Template Name" value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <input type="text" placeholder="Size (e.g. 4R)" value={templateForm.size} onChange={e => setTemplateForm({ ...templateForm, size: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <input type="file" accept="image/*" onChange={e => setTemplateForm({ ...templateForm, frame_image: e.target.files?.[0] })} className="px-4 py-2 border rounded-xl text-sm bg-white" />
-                                                <input type="number" placeholder="Display Order" value={templateForm.display_order} onChange={e => setTemplateForm({ ...templateForm, display_order: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <div className="md:col-span-2 flex justify-end">
+                                                
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Template Name</label>
+                                                    <input type="text" required value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                </div>
+                                                
+                                                <div>
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Size (e.g. 4R)</label>
+                                                    <input type="text" value={templateForm.size} onChange={e => setTemplateForm({ ...templateForm, size: e.target.value })} className="w-full px-4 py-2 border rounded-xl text-sm" />
+                                                </div>
+                                                
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-xs font-bold text-warm-grey uppercase mb-1">Frame Image Upload</label>
+                                                    <input type="file" accept="image/*" onChange={e => setTemplateForm({ ...templateForm, frame_image: e.target.files?.[0] })} className="w-full px-4 py-2 border rounded-xl text-sm bg-white" />
+                                                </div>
+                                                
+                                                <div className="md:col-span-2 flex justify-end mt-2">
                                                     <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save Template</button>
                                                 </div>
                                             </form>
@@ -659,10 +737,10 @@ export default function Dashboard() {
                                                             )}
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="font-semibold text-charcoal text-sm truncate">{t.name}</p>
-                                                                <p className="text-xs text-warm-grey mt-0.5">{t.size}{t.frame_type ? ` · ${t.frame_type}` : ''}</p>
+                                                                <p className="text-xs text-warm-grey mt-0.5">{t.size}</p>
                                                             </div>
                                                             <div className="flex gap-2 flex-shrink-0">
-                                                                <button onClick={() => setTemplateForm({ id: t.id, name: t.name, size: t.size || '4R', frame_type: t.frame_type || '', layout_type: t.layout_type || '', description: t.description || '', is_active: t.is_active, display_order: t.display_order || 0 })} className="p-1.5 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors">
+                                                                <button onClick={() => setTemplateForm({ id: t.id, name: t.name, size: t.size || '4R', is_active: t.is_active, display_order: t.display_order || 0 })} className="p-1.5 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors">
                                                                     <Edit2 size={14} />
                                                                 </button>
                                                                 <button onClick={() => del(`/admin/api/photo-templates/${t.id}`, loadTemplates)} className="p-1.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
