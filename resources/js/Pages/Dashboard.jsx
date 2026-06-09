@@ -160,10 +160,21 @@ export default function Dashboard() {
     
     const handleTemplateSubmit = e => {
         e.preventDefault();
-        const fd = new FormData(); Object.entries(templateForm).forEach(([k, v]) => { if (v != null) fd.append(k, v); });
+        const fd = new FormData();
+        Object.entries(templateForm).forEach(([k, v]) => {
+            if (v == null) return;
+            if (v instanceof File) { fd.append(k, v); return; }
+            // FormData converts booleans to "true"/"false" — Laravel requires 1/0
+            if (typeof v === 'boolean') { fd.append(k, v ? '1' : '0'); return; }
+            fd.append(k, v);
+        });
         const url = `/admin/api/photo-templates${templateForm.id ? `/${templateForm.id}` : ''}`;
         axios.post(url, fd, { headers: { 'Content-Type': 'multipart/form-data' }, params: templateForm.id ? { _method: 'PUT' } : {} })
-            .then(r => { showMsg(r.data.message); setTemplateForm({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', description: '', is_active: true, display_order: 0 }); loadTemplates(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error'));
+            .then(r => {
+                showMsg(r.data.message);
+                setTemplateForm({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', description: '', is_active: true, display_order: 0 });
+                loadTemplates();
+            }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error'));
     };
 
     const del = (url, reloadFn) => { if (confirm('Hapus item ini?')) axios.delete(url).then(r => { showMsg(r.data.message); reloadFn(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error')); };
