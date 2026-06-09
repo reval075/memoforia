@@ -531,8 +531,8 @@ export default function Booking({ initialDate = null }) {
             payload.append('custom_frame', customFrameFile);
         }
         // Extra Hours & Prints — only send if applicable
-        payload.append('extra_hours', isMaxDurationSelected ? String(form.extra_hours) : '0');
-        payload.append('extra_prints', isMaxPrintLimitSelected ? String(form.extra_prints) : '0');
+        payload.append('extra_hours', isExtraHourAvailable ? String(form.extra_hours) : '0');
+        payload.append('extra_prints', isExtraPrintAvailable ? String(form.extra_prints) : '0');
         addonsPayload.forEach((item, index) => {
             payload.append(`addons[${index}][id]`, item.id);
             payload.append(`addons[${index}][quantity]`, item.quantity);

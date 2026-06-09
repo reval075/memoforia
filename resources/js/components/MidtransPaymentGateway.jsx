@@ -47,6 +47,23 @@ export default function MidtransPaymentGateway({
     );
     const hasSnapToken = !!pendingPayment?.snap_token;
 
+    // Debug logging — hapus setelah payment gateway berfungsi
+    console.log('[MidtransPaymentGateway] State:', {
+        transactionCode,
+        status: transactionData.status,
+        isDpStatus,
+        isSettlement,
+        paymentType,
+        dpMode,
+        payments: transactionData.payments,
+        pendingPayment,
+        hasSnapToken,
+        windowSnapAvailable: typeof window !== 'undefined' && !!window.snap,
+        minDpAmount,
+        totalPrice,
+    });
+
+
     useEffect(() => {
         if (isSettlement && transactionData.remaining_amount) {
             setAmount(transactionData.remaining_amount.toString());

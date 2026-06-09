@@ -21,16 +21,23 @@ class MidtransService
 
     private function initializeConfig(): void
     {
-        Config::$serverKey = config('midtrans.server_key');
-        Config::$clientKey = config('midtrans.client_key');
+        Config::$serverKey    = trim(config('midtrans.server_key', ''));
+        Config::$clientKey    = trim(config('midtrans.client_key', ''));
         Config::$isProduction = config('midtrans.is_production', false);
-        Config::$isSanitized = config('midtrans.is_sanitized', true);
-        Config::$is3ds = config('midtrans.is_3ds', true);
+        Config::$isSanitized  = config('midtrans.is_sanitized', true);
+        Config::$is3ds        = config('midtrans.is_3ds', true);
     }
 
     public function assertConfigured(): void
     {
-        if (empty(config('midtrans.server_key')) || empty(config('midtrans.client_key'))) {
+        $serverKey = trim(config('midtrans.server_key', ''));
+        $clientKey = trim(config('midtrans.client_key', ''));
+
+        if (empty($serverKey) || empty($clientKey)) {
+            Log::error('Midtrans not configured', [
+                'server_key_empty' => empty($serverKey),
+                'client_key_empty' => empty($clientKey),
+            ]);
             throw new Exception('Payment gateway belum dikonfigurasi. Hubungi admin.');
         }
     }
@@ -203,6 +210,14 @@ class MidtransService
             }
 
             $snapToken = Snap::getSnapToken($transactionParams);
+
+            Log::info('Midtrans snap token created', [
+                'order_id'   => $orderId,
+                'amount'     => $amount,
+                'payment_type' => $paymentType,
+                'booking_id' => $bookingId,
+                'snap_token_preview' => substr($snapToken, 0, 20) . '...',
+            ]);
 
             $payment = Payment::create([
                 'booking_id'         => $bookingId,

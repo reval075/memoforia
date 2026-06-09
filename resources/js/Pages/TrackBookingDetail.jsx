@@ -18,6 +18,7 @@ import {
 import { TRACKING_SESSION_KEY } from '../constants/tracking';
 import PaymentProofUpload from '../components/PaymentProofUpload';
 import MidtransPaymentGateway from '../components/MidtransPaymentGateway';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { art } from '@/design/artDirection';
 import EditorialStack from '@/components/art/EditorialStack';
 import ChunkyButton from '@/components/art/ChunkyButton';
@@ -190,8 +191,9 @@ export default function TrackBookingDetail() {
     const extraHours = Number(booking.extra_hours || 0);
     const extraPrints = Number(booking.extra_prints || 0);
     const extraHourPrice = Number(booking.package_variant?.extra_hour_price || 0);
+    const extraPrintPrice = Number(booking.package_variant?.extra_print_price || 50000);
     const extraHourCost = extraHours > 0 && extraHourPrice > 0 ? extraHours * extraHourPrice : 0;
-    const extraPrintCost = extraPrints > 0 ? (extraPrints / 50) * 500000 : 0;
+    const extraPrintCost = extraPrints > 0 ? (extraPrints / 50) * extraPrintPrice : 0;
 
     const addonsTotal = addons.reduce(
         (sum, addon) => sum + Number(addon.price || 0) * Number(addon.quantity || 0),
@@ -202,13 +204,40 @@ export default function TrackBookingDetail() {
         ? Number(booking.package_variant.price)
         : Math.max(Number(booking.total_price || 0) - addonsTotal - extraHourCost - extraPrintCost, 0);
 
-    const hasPendingManualPayment = payments.some((p) => p.status === 'pending' && p.payment_source === 'manual');
+    const hasPendingMidtransPayment = payments.some(
+        (p) => p.status === 'pending' && p.payment_source === 'midtrans'
+    );
+    const hasPendingManualPayment = payments.some(
+        (p) => p.status === 'pending' && p.payment_source === 'manual'
+    );
 
+    // canShowMidtransSection: tampilkan gateway Midtrans jika:
+    // 1. Booking sudah disetujui dan menunggu DP, atau
+    // 2. Booking sudah confirmed tapi belum lunas (settlement)
+    // 3. DP belum expired (dari server maupun client countdown)
+    // CATATAN: hasPendingManualPayment TIDAK memblokir gateway Midtrans
+    //          karena pembayaran manual DP sudah dinonaktifkan di backend
     const canShowMidtransSection =
         !booking.is_dp_expired &&
         !clientDpExpired &&
-        (booking.status === 'waiting_dp' || (booking.status === 'confirmed' && booking.remaining_amount > 0)) &&
-        !hasPendingManualPayment;
+        (booking.status === 'waiting_dp' ||
+            (booking.status === 'confirmed' && Number(booking.remaining_amount) > 0));
+
+    // Debug logging — hapus setelah payment gateway berfungsi
+    console.log('[TrackBookingDetail] Booking Debug:', {
+        booking_code: booking.booking_code,
+        status: booking.status,
+        payment_status: booking.payment_status,
+        is_dp_expired: booking.is_dp_expired,
+        clientDpExpired,
+        remaining_amount: booking.remaining_amount,
+        payments_count: payments.length,
+        hasPendingMidtransPayment,
+        hasPendingManualPayment,
+        canShowMidtransSection,
+    });
+    console.log('[TrackBookingDetail] Payments:', payments);
+
 
     const canShowUploadSection =
         booking.can_upload_proof &&
@@ -219,8 +248,8 @@ export default function TrackBookingDetail() {
 
     return (
         <GuestLayout>
-            <Head title={`Detail Booking ${booking.booking_code}`} />
-
+            <Head title={`Detail Booking ${booking?.booking_code || ''}`} />
+            <ErrorBoundary>
             <section className={`${art.section.pad} max-w-4xl mx-auto min-h-[70vh] pt-28 md:pt-36`}>
                 <motion.div
                     initial={{ opacity: 0, y: 40 }}
@@ -340,7 +369,7 @@ export default function TrackBookingDetail() {
                                 />
                             )}
 
-                            {/* Extra Cetakan */}
+                    {/* Extra Cetakan */}
                             {extraPrints > 0 && (
                                 <InfoRow
                                     label={`Tambah Cetakan (+${extraPrints} lembar)`}
@@ -350,8 +379,8 @@ export default function TrackBookingDetail() {
                             <InfoRow
                                 label="Template Frame"
                                 value={
-                                    booking.selected_template
-                                        ? `${booking.selected_template.name} (${booking.selected_template.size})`
+                                    booking?.selected_template
+                                        ? `${booking.selected_template.name || ''} ${booking.selected_template.size ? `(${booking.selected_template.size})` : ''}`
                                         : '-'
                                 }
                             />
@@ -366,11 +395,11 @@ export default function TrackBookingDetail() {
                                                 className="flex flex-col sm:flex-row sm:justify-between gap-1"
                                             >
                                                 <span>
-                                                    {addon.name} × {addon.quantity}
+                                                    {addon?.name || 'Addon'} × {addon?.quantity || 0}
                                                 </span>
                                                 <span className="font-medium text-charcoal">
                                                     {formatCurrency(
-                                                        Number(addon.price) * Number(addon.quantity)
+                                                        Number(addon?.price || 0) * Number(addon?.quantity || 0)
                                                     )}
                                                 </span>
                                             </li>
@@ -384,29 +413,35 @@ export default function TrackBookingDetail() {
                         </RevealItem>
 
                         {canShowMidtransSection && (
-                            <MidtransPaymentGateway
-                                transactionCode={session.booking_code}
-                                contact={session.contact}
-                                transactionData={booking}
-                                transactionType="booking"
-                                onPaymentSuccess={refreshTrackingData}
-                            />
+                            <RevealItem>
+                                <MidtransPaymentGateway
+                                    transactionCode={session.booking_code}
+                                    contact={session.contact}
+                                    transactionData={booking}
+                                    transactionType="booking"
+                                    onPaymentSuccess={refreshTrackingData}
+                                />
+                            </RevealItem>
                         )}
 
                         {canShowUploadSection && (
-                            <PaymentProofUpload
-                                transactionCode={session.booking_code}
-                                contact={session.contact}
-                                transactionData={booking}
-                                transactionType="booking"
-                                onUploadSuccess={refreshTrackingData}
-                            />
+                            <RevealItem>
+                                <PaymentProofUpload
+                                    transactionCode={session.booking_code}
+                                    contact={session.contact}
+                                    transactionData={booking}
+                                    transactionType="booking"
+                                    onUploadSuccess={refreshTrackingData}
+                                />
+                            </RevealItem>
                         )}
 
                         {hasPendingManualPayment && (
-                            <div className="bg-blue-50 border border-blue-100 text-blue-700 px-5 py-4 rounded-2xl text-sm mt-6">
-                                Bukti pembayaran manual Anda sedang menunggu verifikasi admin.
-                            </div>
+                            <RevealItem>
+                                <div className="bg-blue-50 border border-blue-100 text-blue-700 px-5 py-4 rounded-2xl text-sm mt-6">
+                                    Bukti pembayaran manual Anda sedang menunggu verifikasi admin.
+                                </div>
+                            </RevealItem>
                         )}
 
                         <RevealItem>
@@ -478,23 +513,23 @@ export default function TrackBookingDetail() {
                                             >
                                                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                                                     <span className="font-medium text-charcoal uppercase text-xs">
-                                                        {payment.payment_type?.replace('_', ' ')}
+                                                        {payment?.payment_type?.replace('_', ' ') || '-'}
                                                     </span>
                                                     <StatusBadge
-                                                        label={payment.status}
-                                                        styleClass={getPaymentVerificationStyle(payment.status)}
+                                                        label={payment?.status}
+                                                        styleClass={getPaymentVerificationStyle(payment?.status)}
                                                     />
                                                 </div>
                                                 <p className="text-charcoal font-semibold mb-1">
-                                                    {formatCurrency(payment.amount)}
+                                                    {formatCurrency(payment?.amount)}
                                                 </p>
                                                 <p className="text-warm-grey text-xs">
-                                                    Metode: {payment.payment_method || '-'}
+                                                    Metode: {payment?.payment_method || '-'}
                                                 </p>
                                                 <p className="text-warm-grey text-xs mt-1">
-                                                    Diajukan: {formatDateTime(payment.created_at)}
+                                                    Diajukan: {formatDateTime(payment?.created_at)}
                                                 </p>
-                                                {payment.verified_at && (
+                                                {payment?.verified_at && (
                                                     <p className="text-warm-grey text-xs">
                                                         Diverifikasi: {formatDateTime(payment.verified_at)}
                                                     </p>
@@ -515,14 +550,14 @@ export default function TrackBookingDetail() {
                                             <div key={doc.id} className="bg-off-white border border-beige/60 rounded-xl p-4 flex flex-col hover:border-primary transition-colors">
                                                 <div className="flex justify-between items-start mb-3">
                                                     <div>
-                                                        <span className="font-bold text-primary uppercase text-sm block">{doc.document_type.replace('_', ' ')}</span>
-                                                        <span className="text-xs text-warm-grey font-mono mt-1 block">{doc.document_number}</span>
+                                                        <span className="font-bold text-primary uppercase text-sm block">{doc?.document_type?.replace('_', ' ') || '-'}</span>
+                                                        <span className="text-xs text-warm-grey font-mono mt-1 block">{doc?.document_number || '-'}</span>
                                                     </div>
                                                 </div>
                                                 <div className="text-[11px] text-warm-grey mb-4">
-                                                    Dibuat: {new Date(doc.generated_at).toLocaleString('id-ID')}
+                                                    Dibuat: {doc?.generated_at ? new Date(doc.generated_at).toLocaleString('id-ID') : '-'}
                                                 </div>
-                                                <a href={`/api/bookings/${booking.booking_code}/documents/download-latest/${doc.document_type}`} target="_blank" rel="noopener noreferrer" className="mt-auto bg-white border border-primary text-primary hover:bg-primary hover:text-white py-2 text-center rounded-lg text-xs font-semibold transition-colors">
+                                                <a href={`/api/bookings/${booking?.booking_code}/documents/download-latest/${doc?.document_type}`} target="_blank" rel="noopener noreferrer" className="mt-auto bg-white border border-primary text-primary hover:bg-primary hover:text-white py-2 text-center rounded-lg text-xs font-semibold transition-colors">
                                                     Unduh Dokumen
                                                 </a>
                                             </div>
@@ -553,6 +588,7 @@ export default function TrackBookingDetail() {
                     </div>
                 </motion.div>
             </section>
+            </ErrorBoundary>
         </GuestLayout>
     );
 }

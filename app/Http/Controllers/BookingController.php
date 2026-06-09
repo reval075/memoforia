@@ -315,12 +315,32 @@ class BookingController extends Controller
             ]);
         }
 
+        $trackingPayload = $this->formatTrackingPayload($booking);
+
+        // Debug logging — hapus setelah payment gateway berfungsi
+        \Illuminate\Support\Facades\Log::info('Booking Track Debug', [
+            'booking_id'      => $booking->id,
+            'booking_code'    => $booking->booking_code,
+            'status'          => $booking->status,
+            'payment_status'  => $booking->payment_status,
+            'payments_count'  => count($trackingPayload['payments'] ?? []),
+            'payments_summary' => collect($trackingPayload['payments'] ?? [])->map(fn($p) => [
+                'id'             => $p['id'],
+                'type'           => $p['payment_type'],
+                'status'         => $p['status'],
+                'source'         => $p['payment_source'],
+                'has_snap_token' => !empty($p['snap_token']),
+            ])->all(),
+            'can_show_midtrans' => in_array($booking->status, ['waiting_dp', 'confirmed']),
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Booking ditemukan.',
-            'data' => $this->formatTrackingPayload($booking),
-            'errors' => null,
+            'data'    => $trackingPayload,
+            'errors'  => null,
         ]);
+
     }
 
     /**
@@ -807,6 +827,7 @@ class BookingController extends Controller
                 'print_limit' => $booking->packageVariant->print_limit,
                 'is_unlimited' => (bool) $booking->packageVariant->is_unlimited,
                 'extra_hour_price' => $booking->packageVariant->extra_hour_price,
+                'extra_print_price' => $booking->packageVariant->extra_print_price,
             ] : null,
             'selected_template' => $booking->selectedTemplate ? [
                 'id' => $booking->selectedTemplate->id,
