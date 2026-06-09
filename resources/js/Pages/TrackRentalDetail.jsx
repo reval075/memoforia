@@ -13,6 +13,7 @@ import {
     AlertCircle,
     Clock,
     User,
+    FileText,
 } from 'lucide-react';
 import { RENTAL_TRACKING_SESSION_KEY } from '../constants/tracking';
 import MidtransPaymentGateway from '../components/MidtransPaymentGateway';
@@ -453,6 +454,31 @@ export default function TrackRentalDetail() {
                             </div>
                         </SectionCard>
                         </RevealItem>
+
+                        {rental.documents && rental.documents.length > 0 && (
+                            <RevealItem>
+                                <SectionCard title="Dokumen Sewa" icon={FileText}>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {rental.documents.map(doc => (
+                                            <div key={doc.id} className="bg-off-white border border-beige/60 rounded-xl p-4 flex flex-col hover:border-primary transition-colors">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div>
+                                                        <span className="font-bold text-primary uppercase text-sm block">{doc?.document_type?.replace('_', ' ') || '-'}</span>
+                                                        <span className="text-xs text-warm-grey font-mono mt-1 block">{doc?.document_number || '-'}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="text-[11px] text-warm-grey mb-4">
+                                                    Dibuat: {doc?.generated_at ? new Date(doc.generated_at).toLocaleString('id-ID') : '-'}
+                                                </div>
+                                                <a href={`/api/rentals/${rental?.rental_code}/documents/download-latest/${doc?.document_type}`} target="_blank" rel="noopener noreferrer" className="mt-auto bg-white border border-primary text-primary hover:bg-primary hover:text-white py-2 text-center rounded-lg text-xs font-semibold transition-colors">
+                                                    Unduh Dokumen
+                                                </a>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </SectionCard>
+                            </RevealItem>
+                        )}
 
                         {rental.notes && (
                             <RevealItem>

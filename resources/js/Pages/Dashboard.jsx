@@ -19,9 +19,11 @@ function StatusBadge({ status }) {
 
 function PaymentBadge({ status }) {
     const cfg = {
-        unpaid: ['Belum Bayar', 'bg-gray-100 text-gray-500 ring-gray-200'],
-        partial: ['DP Terbayar', 'bg-amber-50 text-amber-600 ring-amber-200'],
-        paid: ['Lunas', 'bg-emerald-50 text-emerald-700 ring-emerald-200']
+        unpaid:         ['Belum Bayar',     'bg-gray-100 text-gray-500 ring-gray-200'],
+        partial:        ['DP Terbayar',     'bg-amber-50 text-amber-600 ring-amber-200'],
+        partially_paid: ['DP Terbayar',     'bg-amber-50 text-amber-600 ring-amber-200'],
+        paid:           ['Lunas',           'bg-emerald-50 text-emerald-700 ring-emerald-200'],
+        pending:        ['Pending',         'bg-sky-50 text-sky-600 ring-sky-200'],
     };
     const [label, cls] = cfg[status] || [status || '-', 'bg-gray-100 text-gray-500 ring-gray-200'];
     return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ring-1 ring-inset ${cls}`}>{label}</span>;
@@ -98,7 +100,7 @@ export default function Dashboard() {
     
     const loadStats = () => { setStatsLoading(true); axios.get('/admin/api/stats').then(r => setStats(r.data)).catch(() => {}).finally(() => setStatsLoading(false)); };
     const loadBookings = () => { setLoading(true); const p = new URLSearchParams(); if (filter) p.set('status', filter); axios.get(`/admin/api/bookings?${p}`).then(r => setBookings(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => showMsg('Gagal memuat booking.', 'error')).finally(() => setLoading(false)); };
-    const loadRentals = () => { setLoading(true); const p = new URLSearchParams(); if (filter) p.set('status', filter); axios.get(`/admin/api/rentals?${p}`).then(r => setRentals(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => showMsg('Gagal memuat sewa.', 'error')).finally(() => setLoading(false)); };
+    const loadRentals = () => { setLoading(true); const p = new URLSearchParams(); if (filter) p.set('status', filter); axios.get(`/admin/api/rentals?${p}`).then(r => { const data = Array.isArray(r.data?.data) ? r.data.data : []; setRentals(data); setSelectedItem(prev => { if (prev && selectedType === 'rental') { const refreshed = data.find(r => r.id === prev.id); return refreshed ? refreshed : prev; } return prev; }); }).catch(err => showMsg('Gagal memuat sewa.', 'error')).finally(() => setLoading(false)); };
     const loadPackages = () => axios.get('/admin/api/service-packages').then(r => setPackages(r.data.data)).catch(() => showMsg('Gagal memuat paket.', 'error'));
     const loadVariants = () => axios.get('/admin/api/service-packages').then(r => {
         const allVariants = (r.data.data || []).flatMap(p => (p.package_variants || []).map(v => ({ ...v, package_name: p.name })));
@@ -128,13 +130,16 @@ export default function Dashboard() {
     const handleVerify = (pid, status, type) => {
         axios.post(`/admin/api/${type === 'booking' ? 'payments' : 'rentals-payments'}/${pid}/verify`, { status }).then(r => {
             showMsg(r.data.message); loadStats(); type === 'booking' ? loadBookings() : loadRentals();
-            setSelectedItem(prev => prev ? { ...prev, payments: prev.payments.map(p => p.id === pid ? { ...p, status } : p) } : null);
+            // Untuk booking: update optimistis; untuk rental: loadRentals() sudah refresh selectedItem
+            if (type === 'booking') {
+                setSelectedItem(prev => prev ? { ...prev, payments: prev.payments.map(p => p.id === pid ? { ...p, status } : p) } : null);
+            }
         }).catch(err => showMsg(err.response?.data?.message || 'Gagal.', 'error'));
     };
 
     const handleComplete = (id, type) => req(axios.post(`/admin/api/${type === 'booking' ? 'bookings' : 'rentals'}/${id}/complete`), type);
     const handleCancel = (id, type) => { if (confirm('Batalkan pesanan ini?')) { req(axios.post(`/admin/api/${type === 'booking' ? 'bookings' : 'rentals'}/${id}/cancel`), type); setSelectedItem(null); } };
-    const handleRegenerateDoc = (code, type) => { if (confirm(`Regenerate dokumen ${type}?`)) axios.post(`/api/bookings/${code}/documents/regenerate`, { type }).then(r => { showMsg(r.data.message); loadBookings(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal.', 'error')); };
+    const handleRegenerateDoc = (code, type, moduleType) => { if (confirm(`Regenerate dokumen ${type}?`)) { const endpoint = moduleType === 'booking' ? `/api/bookings/${code}/documents/regenerate` : `/api/rentals/${code}/documents/regenerate`; axios.post(endpoint, { type }).then(r => { showMsg(r.data.message); moduleType === 'booking' ? loadBookings() : loadRentals(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal.', 'error')); } };
 
     const handleBlockDateSubmit = e => {
         e.preventDefault();
@@ -203,7 +208,18 @@ export default function Dashboard() {
                         <h3 className="font-serif text-lg font-semibold text-charcoal">{code}</h3>
                         <div className="flex gap-2 mt-1"><StatusBadge status={item.status} /></div>
                     </div>
-                    <button onClick={() => setSelectedItem(null)} className="p-2 hover:bg-beige rounded-full text-warm-grey"><X size={20} /></button>
+                    <div className="flex items-center gap-2">
+                        {!isB && (
+                            <button
+                                onClick={() => loadRentals()}
+                                title="Refresh data rental"
+                                className="p-2 hover:bg-emerald-50 hover:text-emerald-600 rounded-full text-warm-grey transition-colors"
+                            >
+                                <RefreshCw size={16} />
+                            </button>
+                        )}
+                        <button onClick={() => setSelectedItem(null)} className="p-2 hover:bg-beige rounded-full text-warm-grey"><X size={20} /></button>
+                    </div>
                 </div>
                 
                 <div className="p-6 space-y-6 flex-1">
@@ -268,6 +284,19 @@ export default function Dashboard() {
                             <span className="text-sm text-warm-grey">Remaining</span>
                             <span className="text-sm font-bold text-red-500">{formatRp(rem)}</span>
                         </div>
+                        {!isB && item.payment_status && (
+                            <div className="flex justify-between items-center pt-2 mt-2 border-t border-beige">
+                                <span className="text-sm text-warm-grey">Payment Status</span>
+                                <PaymentBadge status={item.payment_status} />
+                            </div>
+                        )}
+                        {!isB && item.dp_expired_at && item.status === 'waiting_dp' && (
+                            <div className="mt-2 pt-2 border-t border-beige">
+                                <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                                    <Clock size={12} /> DP Deadline: {new Date(item.dp_expired_at).toLocaleString('id-ID')}
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Payments */}
@@ -303,7 +332,7 @@ export default function Dashboard() {
                     </div>
 
                     {/* Documents */}
-                    {isB && item.documents?.length > 0 && (
+                    {item.documents?.length > 0 && (
                         <div className="bg-off-white rounded-xl p-4 border border-beige/60">
                             <h4 className="text-xs font-bold uppercase text-warm-grey mb-3 flex items-center gap-2"><FileText size={14} /> Documents</h4>
                             <div className="space-y-2">
@@ -314,8 +343,8 @@ export default function Dashboard() {
                                             <p className="text-[10px] text-warm-grey">{new Date(d.generated_at).toLocaleDateString('id-ID')}</p>
                                         </div>
                                         <div className="flex gap-1">
-                                            <a href={`/api/bookings/${d.id}/download`} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md"><Eye size={14} /></a>
-                                            <button onClick={() => handleRegenerateDoc(item.booking_code, d.document_type)} className="p-1.5 bg-slate-100 text-slate hover:bg-slate-200 rounded-md"><RefreshCw size={14} /></button>
+                                            <a href={isB ? `/api/documents/${d.id}/download` : `/api/rental-documents/${d.id}/download`} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md"><Eye size={14} /></a>
+                                            <button onClick={() => handleRegenerateDoc(isB ? item.booking_code : item.rental_code, d.document_type, selectedType)} className="p-1.5 bg-slate-100 text-slate hover:bg-slate-200 rounded-md"><RefreshCw size={14} /></button>
                                         </div>
                                     </div>
                                 ))}

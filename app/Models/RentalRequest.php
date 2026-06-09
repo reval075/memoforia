@@ -70,6 +70,11 @@ class RentalRequest extends Model
         return $this->hasMany(RentalItem::class);
     }
 
+    public function documents()
+    {
+        return $this->hasMany(RentalDocument::class, 'rental_request_id');
+    }
+
     public function payments()
     {
         return $this->hasMany(Payment::class, 'rental_request_id');

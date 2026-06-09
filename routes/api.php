@@ -53,6 +53,12 @@ Route::post('/rental-requests/payment-proof', [RentalRequestController::class, '
     ->middleware('throttle:10,1');
 Route::get('/rentals/{rentalCode}/payment-tracking', [PaymentController::class, 'getRentalPaymentTracking']);
 
+// Rental Documents
+Route::get('/rentals/{rentalCode}/documents', [\App\Http\Controllers\RentalDocumentController::class, 'index']);
+Route::get('/rentals/{rentalCode}/documents/download-latest/{type}', [\App\Http\Controllers\RentalDocumentController::class, 'downloadLatest']);
+Route::get('/rental-documents/{id}/download', [\App\Http\Controllers\RentalDocumentController::class, 'download']);
+Route::post('/rentals/{rentalCode}/documents/regenerate', [\App\Http\Controllers\RentalDocumentController::class, 'regenerate']);
+
 // Payment Routes (Midtrans)
 Route::post('/payments/create', [PaymentController::class, 'create']);
 Route::get('/payments/{paymentId}', [PaymentController::class, 'getStatus']);

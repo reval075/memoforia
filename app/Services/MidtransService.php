@@ -304,10 +304,20 @@ class MidtransService
 
         if ($statusValue === \App\Enums\PaymentStatus::Verified->value) {
             $updateData['verified_at'] = $payment->verified_at ?? now();
-            $updateData['paid_at'] = $payment->paid_at ?? now();
+            $updateData['paid_at']     = $payment->paid_at ?? now();
         }
 
         $payment->update($updateData);
+
+        Log::info('MIDTRANS PAYMENT STATUS UPDATED', [
+            'payment_id'           => $payment->id,
+            'rental_request_id'    => $payment->rental_request_id,
+            'booking_id'           => $payment->booking_id,
+            'midtrans_order_id'    => $payment->midtrans_order_id,
+            'transaction_status'   => $transactionStatus,
+            'mapped_status'        => $statusValue,
+            'is_verified'          => $statusValue === \App\Enums\PaymentStatus::Verified->value,
+        ]);
 
         return true;
     }
@@ -319,13 +329,22 @@ class MidtransService
         try {
             $response = Transaction::status($orderId);
 
+            $status = $response->transaction_status ?? null;
+
+            Log::info('MIDTRANS GET TRANSACTION STATUS', [
+                'order_id'           => $orderId,
+                'transaction_status' => $status,
+                'payment_type'       => $response->payment_type ?? null,
+                'gross_amount'       => $response->gross_amount ?? null,
+            ]);
+
             return [
-                'success' => true,
-                'status'  => $response->transaction_status ?? null,
-                'response'=> $response,
+                'success'  => true,
+                'status'   => $status,
+                'response' => $response,
             ];
         } catch (Exception $e) {
-            Log::error('Failed to get transaction status', [
+            Log::error('MIDTRANS GET TRANSACTION STATUS FAILED', [
                 'order_id' => $orderId,
                 'error'    => $e->getMessage(),
             ]);
@@ -335,17 +354,25 @@ class MidtransService
 
     private function mapTransactionStatus(string $transactionStatus): string
     {
-        return match ($transactionStatus) {
-            'capture'        => \App\Enums\PaymentStatus::Verified->value,
-            'settlement'     => \App\Enums\PaymentStatus::Verified->value,
-            'pending'        => \App\Enums\PaymentStatus::Pending->value,
-            'deny'           => \App\Enums\PaymentStatus::Rejected->value,
-            'cancel'         => \App\Enums\PaymentStatus::Cancelled->value,
-            'expire'         => \App\Enums\PaymentStatus::Expired->value,
-            'refund'         => \App\Enums\PaymentStatus::Refunded->value,
-            'partial_refund' => \App\Enums\PaymentStatus::Refunded->value,
-            default          => throw new \InvalidArgumentException("Unmapped Midtrans status: {$transactionStatus}"),
+        $mapped = match ($transactionStatus) {
+            'capture', 'settlement'           => \App\Enums\PaymentStatus::Verified->value,
+            'pending'                         => \App\Enums\PaymentStatus::Pending->value,
+            'deny'                            => \App\Enums\PaymentStatus::Rejected->value,
+            'cancel'                          => \App\Enums\PaymentStatus::Cancelled->value,
+            'expire'                          => \App\Enums\PaymentStatus::Expired->value,
+            'refund', 'partial_refund'        => \App\Enums\PaymentStatus::Refunded->value,
+            // Fallback: status tidak dikenal dianggap pending, tidak throw exception
+            default                           => \App\Enums\PaymentStatus::Pending->value,
         };
+
+        if (!in_array($transactionStatus, ['capture', 'settlement', 'pending', 'deny', 'cancel', 'expire', 'refund', 'partial_refund'], true)) {
+            Log::warning('MIDTRANS UNKNOWN TRANSACTION STATUS — fallback to pending', [
+                'received_status' => $transactionStatus,
+                'mapped_to'       => $mapped,
+            ]);
+        }
+
+        return $mapped;
     }
 
     public function cancelTransaction(string $orderId): array

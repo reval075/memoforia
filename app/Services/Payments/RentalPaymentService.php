@@ -359,7 +359,7 @@ class RentalPaymentService
             $rental->refresh();
         }
 
-        $rental->load(['items.equipment', 'payments' => fn ($q) => $q->orderByDesc('created_at')]);
+        $rental->load(['items.equipment', 'payments' => fn ($q) => $q->orderByDesc('created_at'), 'documents' => fn ($q) => $q->latest()]);
 
         $paidAmount      = $rental->getPaidAmount();
         $remainingAmount = $rental->getRemainingAmount();
@@ -413,6 +413,12 @@ class RentalPaymentService
                 'created_at'          => $p->created_at?->toIso8601String(),
                 'verified_at'         => $p->verified_at?->toIso8601String(),
             ])->toArray(),
+            'documents' => $rental->documents ? $rental->documents->map(fn ($doc) => [
+                'id' => $doc->id,
+                'document_type' => $doc->document_type,
+                'document_number' => $doc->document_number,
+                'generated_at' => $doc->generated_at?->toIso8601String(),
+            ])->toArray() : [],
         ];
 
         Log::info('[RentalPaymentService] Tracking payload', [
