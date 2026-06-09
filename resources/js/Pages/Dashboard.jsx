@@ -71,9 +71,11 @@ export default function Dashboard() {
     const [bookings, setBookings] = useState([]);
     const [rentals, setRentals] = useState(Array.isArray(initialRentals) ? initialRentals : []);
     const [packages, setPackages] = useState([]);
+    const [packageVariants, setPackageVariants] = useState([]);
     const [addons, setAddons] = useState([]);
     const [templates, setTemplates] = useState([]);
     const [blockedDates, setBlockedDates] = useState([]);
+    const [selectedPackageId, setSelectedPackageId] = useState('');
     const [stats, setStats] = useState({ pending_bookings: 0, active_bookings: 0, pending_rentals: 0, pending_payments: 0, monthly_revenue: 0 });
     
     // UI State
@@ -98,12 +100,17 @@ export default function Dashboard() {
     const loadBookings = () => { setLoading(true); const p = new URLSearchParams(); if (filter) p.set('status', filter); axios.get(`/admin/api/bookings?${p}`).then(r => setBookings(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => showMsg('Gagal memuat booking.', 'error')).finally(() => setLoading(false)); };
     const loadRentals = () => { setLoading(true); const p = new URLSearchParams(); if (filter) p.set('status', filter); axios.get(`/admin/api/rentals?${p}`).then(r => setRentals(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => showMsg('Gagal memuat sewa.', 'error')).finally(() => setLoading(false)); };
     const loadPackages = () => axios.get('/admin/api/service-packages').then(r => setPackages(r.data.data)).catch(() => showMsg('Gagal memuat paket.', 'error'));
+    const loadVariants = () => axios.get('/admin/api/service-packages').then(r => {
+        const allVariants = (r.data.data || []).flatMap(p => (p.package_variants || []).map(v => ({ ...v, package_name: p.name })));
+        setPackageVariants(allVariants);
+        setPackages(r.data.data);
+    }).catch(() => showMsg('Gagal memuat variants.', 'error'));
     const loadAddons = () => axios.get('/admin/api/addons').then(r => setAddons(r.data.data)).catch(() => showMsg('Gagal memuat addons.', 'error'));
     const loadTemplates = () => axios.get('/admin/api/photo-templates').then(r => setTemplates(r.data.data)).catch(() => showMsg('Gagal memuat templates.', 'error'));
     const loadBlockedDates = () => axios.get('/admin/api/unavailable-dates').then(r => setBlockedDates(r.data.data)).catch(() => showMsg('Gagal memuat tanggal blok.', 'error'));
 
     useEffect(() => { if (activeTab === 'bookings') loadBookings(); else if (activeTab === 'rentals') loadRentals(); }, [filter, activeTab]);
-    useEffect(() => { loadStats(); loadPackages(); loadAddons(); loadTemplates(); loadBlockedDates(); }, []);
+    useEffect(() => { loadStats(); loadVariants(); loadAddons(); loadTemplates(); loadBlockedDates(); }, []);
 
     // Actions
     const req = (promise, type) => promise.then(r => { showMsg(r.data.message); if (type === 'booking') loadBookings(); else if (type === 'rental') loadRentals(); else loadBlockedDates(); loadStats(); }).catch(err => showMsg(err.response?.data?.message || 'Gagal', 'error'));
@@ -510,35 +517,151 @@ export default function Dashboard() {
                                     {/* Variants */}
                                     {configSubTab === 'variants' && (
                                         <div className="space-y-8">
-                                            <form onSubmit={e => handleForm(e, 'package-variants', variantForm, setVariantForm, variantForm.id!=null, v=>{}, loadPackages)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="md:col-span-3 mb-2"><h4 className="font-serif font-semibold">Variant Management</h4></div>
-                                                <select required value={variantForm.service_package_id} onChange={e=>setVariantForm({...variantForm, service_package_id: e.target.value})} className="px-4 py-2 border rounded-xl text-sm"><option value="">Select Package</option>{packages.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
-                                                <input type="text" required placeholder="Variant Name" value={variantForm.name} onChange={e=>setVariantForm({...variantForm, name: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <input type="number" required placeholder="Price" value={variantForm.price} onChange={e=>setVariantForm({...variantForm, price: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <div className="md:col-span-3 flex justify-end"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
+                                            {/* Form */}
+                                            <form onSubmit={e => handleForm(e, 'package-variants', variantForm, setVariantForm, variantForm.id != null, v => {}, loadVariants)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div className="md:col-span-3 mb-2 flex items-center justify-between">
+                                                    <h4 className="font-serif font-semibold">{variantForm.id ? 'Edit Variant' : 'New Variant'}</h4>
+                                                    {variantForm.id && <button type="button" onClick={() => setVariantForm({ id: null, service_package_id: '', name: '', price: '', duration_hours: '', print_limit: '', extra_hour_price: '', is_unlimited: false })} className="text-xs text-warm-grey underline">Cancel Edit</button>}
+                                                </div>
+                                                <select required value={variantForm.service_package_id} onChange={e => setVariantForm({ ...variantForm, service_package_id: e.target.value })} className="px-4 py-2 border rounded-xl text-sm">
+                                                    <option value="">Select Package</option>
+                                                    {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                </select>
+                                                <input type="text" required placeholder="Variant Name" value={variantForm.name} onChange={e => setVariantForm({ ...variantForm, name: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <input type="number" required placeholder="Price (Rp)" value={variantForm.price} onChange={e => setVariantForm({ ...variantForm, price: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <div className="md:col-span-3 flex justify-end">
+                                                    <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save Variant</button>
+                                                </div>
                                             </form>
+
+                                            {/* Filter by Package */}
+                                            <div className="flex items-center gap-3">
+                                                <label className="text-xs font-bold text-warm-grey uppercase">Filter by Package:</label>
+                                                <select value={selectedPackageId} onChange={e => setSelectedPackageId(e.target.value)} className="px-4 py-2 border border-beige rounded-xl text-sm bg-white">
+                                                    <option value="">All Packages</option>
+                                                    {packages.map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                                                </select>
+                                            </div>
+
+                                            {/* Variant List */}
+                                            <div className="divide-y divide-beige border border-beige rounded-2xl overflow-hidden">
+                                                {(selectedPackageId
+                                                    ? packageVariants.filter(v => String(v.service_package_id) === selectedPackageId)
+                                                    : packageVariants
+                                                ).length === 0 ? (
+                                                    <p className="px-6 py-8 text-center text-warm-grey text-sm">Tidak ada variant ditemukan. Pilih package atau tambah variant baru.</p>
+                                                ) : (
+                                                    (selectedPackageId
+                                                        ? packageVariants.filter(v => String(v.service_package_id) === selectedPackageId)
+                                                        : packageVariants
+                                                    ).map(v => (
+                                                        <div key={v.id} className="flex items-center justify-between px-6 py-4 bg-white hover:bg-slate-50">
+                                                            <div>
+                                                                <p className="font-semibold text-charcoal text-sm">{v.name}</p>
+                                                                <p className="text-xs text-warm-grey mt-0.5">{v.package_name} · {formatRp(v.price)}</p>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => setVariantForm({ id: v.id, service_package_id: String(v.service_package_id), name: v.name, price: v.price, duration_hours: v.duration_hours || '', print_limit: v.print_limit || '', extra_hour_price: v.extra_hour_price || '', is_unlimited: v.is_unlimited || false })} className="p-1.5 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors">
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                                <button onClick={() => del(`/admin/api/package-variants/${v.id}`, loadVariants)} className="p-1.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
                                         </div>
                                     )}
+
                                     {/* Addons */}
                                     {configSubTab === 'addons' && (
                                         <div className="space-y-8">
-                                            <form onSubmit={e => handleForm(e, 'addons', addonForm, setAddonForm, addonForm.id!=null, v=>{}, loadAddons)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="md:col-span-2 mb-2"><h4 className="font-serif font-semibold">Addons Management</h4></div>
-                                                <input type="text" required placeholder="Addon Name" value={addonForm.name} onChange={e=>setAddonForm({...addonForm, name: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <input type="number" required placeholder="Price" value={addonForm.price} onChange={e=>setAddonForm({...addonForm, price: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <div className="md:col-span-2 flex justify-end"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
+                                            {/* Form */}
+                                            <form onSubmit={e => handleForm(e, 'addons', addonForm, setAddonForm, addonForm.id != null, v => {}, loadAddons)} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="md:col-span-2 mb-2 flex items-center justify-between">
+                                                    <h4 className="font-serif font-semibold">{addonForm.id ? 'Edit Addon' : 'New Addon'}</h4>
+                                                    {addonForm.id && <button type="button" onClick={() => setAddonForm({ id: null, name: '', price: '', description: '', is_active: true, display_order: 0 })} className="text-xs text-warm-grey underline">Cancel Edit</button>}
+                                                </div>
+                                                <input type="text" required placeholder="Addon Name" value={addonForm.name} onChange={e => setAddonForm({ ...addonForm, name: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <input type="number" required placeholder="Price (Rp)" value={addonForm.price} onChange={e => setAddonForm({ ...addonForm, price: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <textarea placeholder="Description (optional)" value={addonForm.description} onChange={e => setAddonForm({ ...addonForm, description: e.target.value })} className="md:col-span-2 px-4 py-2 border rounded-xl text-sm" rows="2" />
+                                                <div className="md:col-span-2 flex justify-end">
+                                                    <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save Addon</button>
+                                                </div>
                                             </form>
+
+                                            {/* Addon List */}
+                                            <div className="divide-y divide-beige border border-beige rounded-2xl overflow-hidden">
+                                                {addons.length === 0 ? (
+                                                    <p className="px-6 py-8 text-center text-warm-grey text-sm">Belum ada addon. Tambah addon baru di atas.</p>
+                                                ) : (
+                                                    addons.map(a => (
+                                                        <div key={a.id} className="flex items-center justify-between px-6 py-4 bg-white hover:bg-slate-50">
+                                                            <div>
+                                                                <p className="font-semibold text-charcoal text-sm">{a.name}</p>
+                                                                <p className="text-xs text-warm-grey mt-0.5">{formatRp(a.price)}{a.description ? ` · ${a.description}` : ''}</p>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => setAddonForm({ id: a.id, name: a.name, price: a.price, description: a.description || '', is_active: a.is_active, display_order: a.display_order || 0 })} className="p-1.5 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors">
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                                <button onClick={() => del(`/admin/api/addons/${a.id}`, loadAddons)} className="p-1.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
                                         </div>
                                     )}
+
                                     {/* Templates */}
                                     {configSubTab === 'templates' && (
                                         <div className="space-y-8">
+                                            {/* Form */}
                                             <form onSubmit={handleTemplateSubmit} className="bg-off-white p-6 rounded-2xl border border-beige grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="md:col-span-2 mb-2"><h4 className="font-serif font-semibold">Template Frames</h4></div>
-                                                <input type="text" required placeholder="Name" value={templateForm.name} onChange={e=>setTemplateForm({...templateForm, name: e.target.value})} className="px-4 py-2 border rounded-xl text-sm" />
-                                                <input type="file" onChange={e=>setTemplateForm({...templateForm, frame_image: e.target.files?.[0]})} className="px-4 py-2 border rounded-xl text-sm bg-white" />
-                                                <div className="md:col-span-2 flex justify-end"><button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save</button></div>
+                                                <div className="md:col-span-2 mb-2 flex items-center justify-between">
+                                                    <h4 className="font-serif font-semibold">{templateForm.id ? 'Edit Template' : 'New Template Frame'}</h4>
+                                                    {templateForm.id && <button type="button" onClick={() => setTemplateForm({ id: null, name: '', size: '4R', frame_type: '', layout_type: '', description: '', is_active: true, display_order: 0 })} className="text-xs text-warm-grey underline">Cancel Edit</button>}
+                                                </div>
+                                                <input type="text" required placeholder="Template Name" value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <input type="text" placeholder="Size (e.g. 4R)" value={templateForm.size} onChange={e => setTemplateForm({ ...templateForm, size: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <input type="file" accept="image/*" onChange={e => setTemplateForm({ ...templateForm, frame_image: e.target.files?.[0] })} className="px-4 py-2 border rounded-xl text-sm bg-white" />
+                                                <input type="number" placeholder="Display Order" value={templateForm.display_order} onChange={e => setTemplateForm({ ...templateForm, display_order: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
+                                                <div className="md:col-span-2 flex justify-end">
+                                                    <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-xl text-sm">Save Template</button>
+                                                </div>
                                             </form>
+
+                                            {/* Template List */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {templates.length === 0 ? (
+                                                    <p className="col-span-2 px-6 py-8 text-center text-warm-grey text-sm">Belum ada template. Tambah template baru di atas.</p>
+                                                ) : (
+                                                    templates.map(t => (
+                                                        <div key={t.id} className="p-4 border border-beige rounded-xl flex items-center gap-4 bg-white hover:bg-slate-50">
+                                                            {t.frame_image && (
+                                                                <img src={`/storage/${t.frame_image}`} alt={t.name} className="w-14 h-14 object-cover rounded-lg border border-beige flex-shrink-0" onError={e => e.target.style.display = 'none'} />
+                                                            )}
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-semibold text-charcoal text-sm truncate">{t.name}</p>
+                                                                <p className="text-xs text-warm-grey mt-0.5">{t.size}{t.frame_type ? ` · ${t.frame_type}` : ''}</p>
+                                                            </div>
+                                                            <div className="flex gap-2 flex-shrink-0">
+                                                                <button onClick={() => setTemplateForm({ id: t.id, name: t.name, size: t.size || '4R', frame_type: t.frame_type || '', layout_type: t.layout_type || '', description: t.description || '', is_active: t.is_active, display_order: t.display_order || 0 })} className="p-1.5 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors">
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                                <button onClick={() => del(`/admin/api/photo-templates/${t.id}`, loadTemplates)} className="p-1.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
