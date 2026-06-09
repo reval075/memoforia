@@ -1,46 +1,47 @@
 /**
- * Homepage image paths — replace files under public/images/ with real Memoforia photos.
- * Gallery entries prefer real booth URLs; local SVG is fallback on error.
+ * Homepage image paths — real Memoforia photobooth assets.
+ * All images are locally hosted PNG files from generated photobooth shoots.
+ * Unsplash fallback only for event-rental (equipment photography).
  */
 
 export const homeImages = {
-    hero: '/images/hero/hero-main.svg',
-    philosophy: '/images/events/event-studio.svg',
-    photobooth: '/images/events/event-booth.svg',
-    rental: '/images/events/event-rental.svg',
+    hero: '/images/strips/strip-01.png',
+    philosophy: '/images/events/event-studio.png',
+    photobooth: '/images/events/event-booth.png',
+    rental: 'https://images.unsplash.com/photo-1471341971476-ae15ff5dd4ea?auto=format&fit=crop&w=800&q=85',
     strips: [
-        { src: '/images/strips/strip-01.svg', alt: 'Photostrip moment 1', rotate: -8 },
-        { src: '/images/strips/strip-02.svg', alt: 'Photostrip moment 2', rotate: 6 },
-        { src: '/images/strips/strip-03.svg', alt: 'Photostrip moment 3', rotate: -4 },
-        { src: '/images/strips/strip-04.svg', alt: 'Photostrip moment 4', rotate: 10 },
+        { src: '/images/strips/strip-01.png', alt: 'Korean Style Photostrip — Memoforia', rotate: -8 },
+        { src: '/images/strips/strip-02.png', alt: 'Cute Pastel Photostrip — Memoforia', rotate: 6 },
+        { src: '/images/strips/strip-03.png', alt: 'Vintage Film Photostrip — Memoforia', rotate: -4 },
+        { src: '/images/strips/strip-04.png', alt: 'Retro 90s Photostrip — Memoforia', rotate: 10 },
     ],
 };
 
-/** Gallery photos — SVG placeholders siap diisi foto asli dari booth */
+/** Gallery photos — real Memoforia photobooth prints */
 export const galleryPhotos = [
     {
-        src: '/images/gallery/gallery-01.svg',
-        fallback: '/images/gallery/gallery-01.svg',
-        alt: 'Memoforia session 1',
+        src: '/images/gallery/gallery-01.png',
+        fallback: '/images/gallery/gallery-01.png',
+        alt: 'Birthday Party Photobooth — Memoforia',
     },
     {
-        src: '/images/gallery/gallery-02.svg',
-        fallback: '/images/gallery/gallery-02.svg',
-        alt: 'Memoforia session 2',
+        src: '/images/gallery/gallery-02.png',
+        fallback: '/images/gallery/gallery-02.png',
+        alt: 'Wedding Photobooth — Memoforia',
     },
     {
-        src: '/images/gallery/gallery-03.svg',
-        fallback: '/images/gallery/gallery-03.svg',
-        alt: 'Memoforia session 3',
+        src: '/images/gallery/gallery-03.png',
+        fallback: '/images/gallery/gallery-03.png',
+        alt: 'Fun Props Photobooth Session — Memoforia',
     },
     {
-        src: '/images/gallery/gallery-04.svg',
-        fallback: '/images/gallery/gallery-04.svg',
-        alt: 'Memoforia session 4',
+        src: '/images/gallery/gallery-04.png',
+        fallback: '/images/gallery/gallery-04.png',
+        alt: 'Group Photobooth Session — Memoforia',
     },
     {
-        src: '/images/gallery/gallery-05.svg',
-        fallback: '/images/gallery/gallery-05.svg',
-        alt: 'Memoforia session 5',
+        src: '/images/gallery/gallery-05.png',
+        fallback: '/images/gallery/gallery-05.png',
+        alt: 'Students Photobooth Session — Memoforia',
     },
 ];
