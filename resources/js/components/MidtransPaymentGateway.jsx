@@ -27,6 +27,7 @@ export default function MidtransPaymentGateway({
     transactionType = 'booking', // 'booking' or 'rental'
     onPaymentSuccess
 }) {
+    console.log('MIDTRANS COMPONENT RENDER');
     const [amount, setAmount] = useState('');
     const [selectedOption, setSelectedOption] = useState('qris');
     const [loading, setLoading] = useState(false);
@@ -46,6 +47,18 @@ export default function MidtransPaymentGateway({
         p => p.status === 'pending' && p.payment_source === 'midtrans' && p.payment_type === paymentType
     );
     const hasSnapToken = !!pendingPayment?.snap_token;
+
+    // --- TEMPORARY DEBUG LOGGING AS REQUESTED ---
+    console.log('[MidtransPaymentGateway] Debug Logs:', {
+        transactionData,
+        payments: transactionData.payments,
+        pendingPayment,
+        hasSnapToken,
+        snap_token: pendingPayment?.snap_token,
+        status: transactionData.status,
+        remaining_amount: transactionData.remaining_amount
+    });
+    // --------------------------------------------
 
     // Debug logging — hapus setelah payment gateway berfungsi
     console.log('[MidtransPaymentGateway] State:', {
@@ -192,6 +205,13 @@ export default function MidtransPaymentGateway({
             </div>
         );
     }
+
+    console.log('MIDTRANS DEBUG', {
+        canShowMidtransSection: true,
+        bookingStatus: transactionData?.status,
+        payments: transactionData?.payments,
+        transactionData: transactionData
+    });
 
     return (
         <div className="bg-white rounded-2xl border border-beige p-6 md:p-8 shadow-sm">
