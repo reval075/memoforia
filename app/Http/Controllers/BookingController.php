@@ -388,7 +388,18 @@ class BookingController extends Controller
                 }
 
                 if ($booking->status === 'completed') {
-                    // Keep confirmed_at if set; no special requirements here.
+                    // Set completed_at jika belum ada
+                    if (! $booking->completed_at) {
+                        $booking->completed_at = now();
+                    }
+                    // Set confirmed_at jika belum ada
+                    if (! $booking->confirmed_at) {
+                        $booking->confirmed_at = now();
+                    }
+                    // Sync payment_status ke 'paid' jika sudah lunas
+                    if ($booking->getRemainingAmount() <= 0) {
+                        $booking->payment_status = 'paid';
+                    }
                 }
 
                 $booking->save();
@@ -632,14 +643,24 @@ class BookingController extends Controller
                     }
 
                     // 6. Auto-cancel competing bookings on the same date (inside transaction)
-                    Booking::where('event_date', $booking->event_date)
+                    $cancelledBookingIds = Booking::where('event_date', $booking->event_date)
                         ->where('id', '!=', $booking->id)
                         ->whereIn('status', ['pending_approval', 'waiting_dp'])
-                        ->update([
+                        ->pluck('id');
+
+                    if ($cancelledBookingIds->isNotEmpty()) {
+                        Booking::whereIn('id', $cancelledBookingIds)->update([
                             'status'       => 'cancelled',
                             'cancelled_at' => now(),
-                            'notes'        => 'Otomatis dibatalkan karena pelanggan lain telah membayar DP terlebih dahulu pada tanggal ini.'
+                            'notes'        => 'Otomatis dibatalkan karena pelanggan lain telah membayar DP terlebih dahulu pada tanggal ini.',
                         ]);
+
+                        // Batalkan juga pending payments dari booking yang auto-cancelled
+                        // agar dashboard admin tidak menampilkan DP pending yang tidak valid
+                        Payment::whereIn('booking_id', $cancelledBookingIds)
+                            ->where('status', \App\Enums\PaymentStatus::Pending)
+                            ->update(['status' => \App\Enums\PaymentStatus::Cancelled]);
+                    }
 
                 } elseif ($payment->payment_type === 'settlement' || $payment->payment_type === 'full_payment') {
                     // Settlement/full payment can only be processed on active booking flows.
@@ -740,34 +761,50 @@ class BookingController extends Controller
             ], 422);
         }
 
+        // Hitung apakah sudah lunas berdasarkan payments verified
+        $isFullyPaid = $booking->getRemainingAmount() <= 0;
+
         $booking->update([
-            'status' => 'completed',
+            'status'         => 'completed',
+            'completed_at'   => $booking->completed_at ?? now(),
+            // Update payment_status ke 'paid' jika memang sudah lunas
+            'payment_status' => $isFullyPaid ? 'paid' : $booking->payment_status,
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Event berhasil diselesaikan!',
-            'data' => $booking,
+            'data' => $booking->fresh(),
             'errors' => null,
         ]);
     }
 
     /**
      * Cancel a booking.
+     *
+     * Also cancels any pending payments so they don't appear as outstanding
+     * in the admin dashboard.
      */
     public function cancel($id)
     {
         $booking = Booking::findOrFail($id);
 
-        $booking->update([
-            'status' => 'cancelled',
-            'cancelled_at' => now(),
-        ]);
+        DB::transaction(function () use ($booking) {
+            // Cancel pending payments terlebih dahulu
+            Payment::where('booking_id', $booking->id)
+                ->where('status', \App\Enums\PaymentStatus::Pending)
+                ->update(['status' => \App\Enums\PaymentStatus::Cancelled]);
+
+            $booking->update([
+                'status'       => 'cancelled',
+                'cancelled_at' => now(),
+            ]);
+        });
 
         return response()->json([
             'success' => true,
             'message' => 'Booking berhasil dibatalkan.',
-            'data' => $booking,
+            'data' => $booking->fresh(),
             'errors' => null,
         ]);
     }

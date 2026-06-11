@@ -269,7 +269,7 @@ export default function Home() {
                         </p>
                         <div className="flex flex-wrap gap-8 mt-10 md:justify-end">
                             {[
-                                { n: '3', l: 'Locations' },
+                                { n: '1', l: 'Locations' },
                                 { n: '10+', l: 'Packages' },
                                 { n: '4.9', l: 'Rating', star: true },
                             ].map((s) => (

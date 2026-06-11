@@ -313,146 +313,146 @@ export default function TrackRentalDetail() {
 
                     <Reveal className="space-y-6 md:space-y-8" stagger staggerChildren={0.08}>
                         <RevealItem>
-                        <SectionCard title="Informasi Penyewa" icon={User}>
-                            <InfoRow label="Nama" value={rental.customer_name} />
-                            <InfoRow label="Email" value={rental.customer_email} />
-                            <InfoRow label="Nomor HP" value={rental.customer_phone} />
-                            {rental.approved_at && (
-                                <InfoRow label="Disetujui Pada" value={formatDateTime(rental.approved_at)} />
-                            )}
-                            {rental.confirmed_at && (
-                                <InfoRow label="Dikonfirmasi Pada" value={formatDateTime(rental.confirmed_at)} />
-                            )}
-                        </SectionCard>
+                            <SectionCard title="Informasi Penyewa" icon={User}>
+                                <InfoRow label="Nama" value={rental.customer_name} />
+                                <InfoRow label="Email" value={rental.customer_email} />
+                                <InfoRow label="Nomor HP" value={rental.customer_phone} />
+                                {rental.approved_at && (
+                                    <InfoRow label="Disetujui Pada" value={formatDateTime(rental.approved_at)} />
+                                )}
+                                {rental.confirmed_at && (
+                                    <InfoRow label="Dikonfirmasi Pada" value={formatDateTime(rental.confirmed_at)} />
+                                )}
+                            </SectionCard>
                         </RevealItem>
 
                         <RevealItem>
-                        <SectionCard title="Jadwal Sewa" icon={Calendar}>
-                            <InfoRow label="Mulai Tanggal" value={rental.start_date} />
-                            <InfoRow label="Sampai Tanggal" value={rental.end_date} />
-                        </SectionCard>
+                            <SectionCard title="Jadwal Sewa" icon={Calendar}>
+                                <InfoRow label="Mulai Tanggal" value={rental.start_date} />
+                                <InfoRow label="Sampai Tanggal" value={rental.end_date} />
+                            </SectionCard>
                         </RevealItem>
 
                         <RevealItem>
-                        <SectionCard title="Peralatan Disewa" icon={Package}>
-                            <ul className="space-y-3">
-                                {items.map((item) => (
-                                    <li key={item.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 border-b border-beige/50 last:border-0">
-                                        <div>
-                                            <span className="font-medium text-charcoal">{item.equipment_name}</span>
-                                            <span className="text-sm text-warm-grey block">Qty: {item.qty}</span>
-                                        </div>
-                                        <span className="font-medium text-charcoal mt-1 sm:mt-0">
-                                            {formatCurrency(item.price)}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </SectionCard>
+                            <SectionCard title="Peralatan Disewa" icon={Package}>
+                                <ul className="space-y-3">
+                                    {items.map((item) => (
+                                        <li key={item.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 border-b border-beige/50 last:border-0">
+                                            <div>
+                                                <span className="font-medium text-charcoal">{item.equipment_name}</span>
+                                                <span className="text-sm text-warm-grey block">Qty: {item.qty}</span>
+                                            </div>
+                                            <span className="font-medium text-charcoal mt-1 sm:mt-0">
+                                                {formatCurrency(item.price)}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </SectionCard>
                         </RevealItem>
 
                         {canShowMidtransSection && (
-                            <RevealItem>
-                            <MidtransPaymentGateway
-                                transactionCode={session.rental_code}
-                                contact={session.contact}
-                                transactionData={rental}
-                                transactionType="rental"
-                                onPaymentSuccess={refreshTrackingData}
-                            />
-                            </RevealItem>
+                            <div>
+                                <MidtransPaymentGateway
+                                    transactionCode={session.rental_code}
+                                    contact={session.contact}
+                                    transactionData={rental}
+                                    transactionType="rental"
+                                    onPaymentSuccess={refreshTrackingData}
+                                />
+                            </div>
                         )}
 
                         {canShowUploadSection && (
-                            <RevealItem>
-                            <PaymentProofUpload
-                                transactionCode={session.rental_code}
-                                contact={session.contact}
-                                transactionData={rental}
-                                transactionType="rental"
-                                onUploadSuccess={refreshTrackingData}
-                            />
-                            </RevealItem>
+                            <div>
+                                <PaymentProofUpload
+                                    transactionCode={session.rental_code}
+                                    contact={session.contact}
+                                    transactionData={rental}
+                                    transactionType="rental"
+                                    onUploadSuccess={refreshTrackingData}
+                                />
+                            </div>
                         )}
 
                         {rental.is_settlement_overdue && rental.status === 'confirmed' && (
                             <RevealItem>
-                            <div className="bg-orange-50 border border-orange-200 text-orange-800 px-5 py-4 rounded-2xl text-sm">
-                                <strong>Batas pelunasan terlewati.</strong> Segera lunasi sisa tagihan atau hubungi admin.
-                            </div>
+                                <div className="bg-orange-50 border border-orange-200 text-orange-800 px-5 py-4 rounded-2xl text-sm">
+                                    <strong>Batas pelunasan terlewati.</strong> Segera lunasi sisa tagihan atau hubungi admin.
+                                </div>
                             </RevealItem>
                         )}
 
                         <RevealItem>
-                        <SectionCard title="Ringkasan Pembayaran" icon={CreditCard}>
-                            <InfoRow
-                                label="Total Biaya Sewa"
-                                value={formatCurrency(rental.total_price)}
-                            />
+                            <SectionCard title="Ringkasan Pembayaran" icon={CreditCard}>
+                                <InfoRow
+                                    label="Total Biaya Sewa"
+                                    value={formatCurrency(rental.total_price)}
+                                />
 
-                            <div className="mt-6 pt-6 border-t border-beige">
-                                <h4 className="text-sm font-semibold text-charcoal mb-3">Status Pembayaran</h4>
-                                <div className="bg-off-white rounded-xl p-4 border border-beige/60 space-y-3">
-                                    <InfoRow
-                                        label="Sudah Dibayar"
-                                        value={formatCurrency(rental.paid_amount || 0)}
-                                    />
-                                    <InfoRow
-                                        label="Sisa Tagihan"
-                                        value={formatCurrency(rental.remaining_amount || 0)}
-                                    />
-
-                                    {rental.settlement_due_at && rental.status === 'confirmed' && (
+                                <div className="mt-6 pt-6 border-t border-beige">
+                                    <h4 className="text-sm font-semibold text-charcoal mb-3">Status Pembayaran</h4>
+                                    <div className="bg-off-white rounded-xl p-4 border border-beige/60 space-y-3">
                                         <InfoRow
-                                            label="Batas Pelunasan"
-                                            value={formatDateTime(rental.settlement_due_at)}
+                                            label="Sudah Dibayar"
+                                            value={formatCurrency(rental.paid_amount || 0)}
                                         />
+                                        <InfoRow
+                                            label="Sisa Tagihan"
+                                            value={formatCurrency(rental.remaining_amount || 0)}
+                                        />
+
+                                        {rental.settlement_due_at && rental.status === 'confirmed' && (
+                                            <InfoRow
+                                                label="Batas Pelunasan"
+                                                value={formatDateTime(rental.settlement_due_at)}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="mt-6">
+                                    <h4 className="text-sm font-semibold text-charcoal mb-3">Riwayat Pembayaran</h4>
+                                    {payments.length === 0 ? (
+                                        <p className="text-sm text-warm-grey bg-off-white rounded-xl p-4 border border-beige/60">
+                                            Belum ada riwayat pembayaran.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {payments.map((payment) => (
+                                                <div
+                                                    key={payment.id}
+                                                    className="bg-off-white rounded-xl p-4 border border-beige/60 text-sm"
+                                                >
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                                        <span className="font-medium text-charcoal uppercase text-xs">
+                                                            {payment.payment_type?.replace('_', ' ')}
+                                                        </span>
+                                                        <StatusBadge
+                                                            label={payment.status}
+                                                            styleClass={getPaymentVerificationStyle(payment.status)}
+                                                        />
+                                                    </div>
+                                                    <p className="text-charcoal font-semibold mb-1">
+                                                        {formatCurrency(payment.amount)}
+                                                    </p>
+                                                    <p className="text-warm-grey text-xs">
+                                                        Metode: {payment.payment_method || '-'}
+                                                    </p>
+                                                    <p className="text-warm-grey text-xs mt-1">
+                                                        Diajukan: {formatDateTime(payment.created_at)}
+                                                    </p>
+                                                    {payment.verified_at && (
+                                                        <p className="text-warm-grey text-xs">
+                                                            Diverifikasi: {formatDateTime(payment.verified_at)}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
-                            </div>
-
-                            <div className="mt-6">
-                                <h4 className="text-sm font-semibold text-charcoal mb-3">Riwayat Pembayaran</h4>
-                                {payments.length === 0 ? (
-                                    <p className="text-sm text-warm-grey bg-off-white rounded-xl p-4 border border-beige/60">
-                                        Belum ada riwayat pembayaran.
-                                    </p>
-                                ) : (
-                                    <div className="space-y-3">
-                                        {payments.map((payment) => (
-                                            <div
-                                                key={payment.id}
-                                                className="bg-off-white rounded-xl p-4 border border-beige/60 text-sm"
-                                            >
-                                                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                                    <span className="font-medium text-charcoal uppercase text-xs">
-                                                        {payment.payment_type?.replace('_', ' ')}
-                                                    </span>
-                                                    <StatusBadge
-                                                        label={payment.status}
-                                                        styleClass={getPaymentVerificationStyle(payment.status)}
-                                                    />
-                                                </div>
-                                                <p className="text-charcoal font-semibold mb-1">
-                                                    {formatCurrency(payment.amount)}
-                                                </p>
-                                                <p className="text-warm-grey text-xs">
-                                                    Metode: {payment.payment_method || '-'}
-                                                </p>
-                                                <p className="text-warm-grey text-xs mt-1">
-                                                    Diajukan: {formatDateTime(payment.created_at)}
-                                                </p>
-                                                {payment.verified_at && (
-                                                    <p className="text-warm-grey text-xs">
-                                                        Diverifikasi: {formatDateTime(payment.verified_at)}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </SectionCard>
+                            </SectionCard>
                         </RevealItem>
 
                         {rental.documents && rental.documents.length > 0 && (
@@ -482,11 +482,11 @@ export default function TrackRentalDetail() {
 
                         {rental.notes && (
                             <RevealItem>
-                            <SectionCard title="Catatan" icon={MapPin}>
-                                <p className="text-sm text-slate leading-relaxed whitespace-pre-wrap">
-                                    {rental.notes}
-                                </p>
-                            </SectionCard>
+                                <SectionCard title="Catatan" icon={MapPin}>
+                                    <p className="text-sm text-slate leading-relaxed whitespace-pre-wrap">
+                                        {rental.notes}
+                                    </p>
+                                </SectionCard>
                             </RevealItem>
                         )}
                     </Reveal>

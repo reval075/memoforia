@@ -24,10 +24,43 @@ export default function MidtransPaymentGateway({
     transactionCode,
     contact,
     transactionData,
-    transactionType = 'booking', // 'booking' or 'rental'
-    onPaymentSuccess
+    transactionType = 'booking', // 'booking' | 'rental'
+    onPaymentSuccess,
 }) {
-    console.log('MIDTRANS COMPONENT RENDER');
+    // ── RETURN A: Guard — prop wajib tidak ada ────────────────────────────
+    if (!transactionData || !transactionCode || !contact) {
+        console.log('[MidtransPaymentGateway] RETURN A — props tidak lengkap', {
+            hasTransactionData: !!transactionData,
+            hasTransactionCode: !!transactionCode,
+            hasContact: !!contact,
+        });
+        return null;
+    }
+
+    return (
+        <MidtransPaymentGatewayInner
+            transactionCode={transactionCode}
+            contact={contact}
+            transactionData={transactionData}
+            transactionType={transactionType}
+            onPaymentSuccess={onPaymentSuccess}
+        />
+    );
+}
+
+/**
+ * Inner component — hanya dirender setelah props dijamin valid.
+ * Dipisah agar hooks tidak dipanggil sebelum guard di atas.
+ */
+function MidtransPaymentGatewayInner({
+    transactionCode,
+    contact,
+    transactionData,
+    transactionType,
+    onPaymentSuccess,
+}) {
+    console.log('[MidtransPaymentGateway] MOUNTED — transactionType:', transactionType);
+
     const [amount, setAmount] = useState('');
     const [selectedOption, setSelectedOption] = useState('qris');
     const [loading, setLoading] = useState(false);
@@ -35,47 +68,45 @@ export default function MidtransPaymentGateway({
     const [dpMode, setDpMode] = useState('dp');
     const [paymentJustSubmitted, setPaymentJustSubmitted] = useState(false);
 
-    const isDpStatus   = transactionData.status === 'waiting_dp';
-    const isSettlement = transactionData.status === 'confirmed' && transactionData.remaining_amount > 0;
-    const minDpAmount  = resolveMinDpForTransaction(transactionData);
-    const minDpPercent = Number(transactionData.min_dp_percent) || 40;
-    const totalPrice   = Number(transactionData.total_price) || 0;
+    let isDpStatus   = false;
+    let isSettlement = false;
+    let minDpAmount  = 0;
+    let minDpPercent = 40;
+    let totalPrice   = 0;
+
+    try {
+        isDpStatus   = transactionData.status === 'waiting_dp';
+        isSettlement = transactionData.status === 'confirmed' && Number(transactionData.remaining_amount) > 0;
+        minDpAmount  = resolveMinDpForTransaction(transactionData);
+        minDpPercent = Number(transactionData.min_dp_percent) || 40;
+        totalPrice   = Number(transactionData.total_price) || 0;
+    } catch (err) {
+        console.error('[MidtransPaymentGateway] Error saat kalkulasi state awal:', err);
+    }
 
     const paymentType = isDpStatus ? dpMode : 'settlement';
 
-    const pendingPayment = transactionData.payments?.find(
+    const payments = Array.isArray(transactionData.payments) ? transactionData.payments : [];
+    const pendingPayment = payments.find(
         p => p.status === 'pending' && p.payment_source === 'midtrans' && p.payment_type === paymentType
     );
     const hasSnapToken = !!pendingPayment?.snap_token;
 
-    // --- TEMPORARY DEBUG LOGGING AS REQUESTED ---
-    console.log('[MidtransPaymentGateway] Debug Logs:', {
-        transactionData,
-        payments: transactionData.payments,
-        pendingPayment,
-        hasSnapToken,
-        snap_token: pendingPayment?.snap_token,
-        status: transactionData.status,
-        remaining_amount: transactionData.remaining_amount
-    });
-    // --------------------------------------------
-
-    // Debug logging — hapus setelah payment gateway berfungsi
-    console.log('[MidtransPaymentGateway] State:', {
+    console.log('[MidtransPaymentGateway] State Debug:', {
+        transactionType,
         transactionCode,
-        status: transactionData.status,
+        status:         transactionData.status,
         isDpStatus,
         isSettlement,
         paymentType,
         dpMode,
-        payments: transactionData.payments,
-        pendingPayment,
+        paymentsCount:  payments.length,
+        pendingPayment: pendingPayment ?? null,
         hasSnapToken,
-        windowSnapAvailable: typeof window !== 'undefined' && !!window.snap,
         minDpAmount,
         totalPrice,
+        windowSnapAvailable: typeof window !== 'undefined' && !!window.snap,
     });
-
 
     useEffect(() => {
         if (isSettlement && transactionData.remaining_amount) {
@@ -91,6 +122,16 @@ export default function MidtransPaymentGateway({
     useEffect(() => {
         setPaymentJustSubmitted(false);
     }, [transactionData.payment_status, transactionData.status]);
+
+    // ── RETURN B: Status tidak memerlukan payment form ────────────────────
+    if (!isDpStatus && !isSettlement) {
+        console.log('[MidtransPaymentGateway] RETURN B — status tidak memerlukan pembayaran', {
+            status: transactionData.status,
+            isDpStatus,
+            isSettlement,
+        });
+        return null;
+    }
 
     const handleCreatePayment = async (e) => {
         e.preventDefault();
@@ -130,8 +171,12 @@ export default function MidtransPaymentGateway({
             payload.rental_code = transactionCode;
         }
 
+        console.log('[MidtransPaymentGateway] Mengirim payload pembayaran:', payload);
+
         try {
             const response = await axios.post('/api/payments/create', payload);
+
+            console.log('[MidtransPaymentGateway] Response dari /api/payments/create:', response.data);
 
             if (response.data?.success && response.data?.data?.snap_token) {
                 triggerSnap(response.data.data.snap_token, response.data.data.payment_id);
@@ -139,6 +184,7 @@ export default function MidtransPaymentGateway({
                 setError(response.data?.message || 'Gagal membuat pembayaran. Silakan coba lagi.');
             }
         } catch (err) {
+            console.error('[MidtransPaymentGateway] Error saat createPayment:', err);
             setError(err.response?.data?.message || 'Terjadi kesalahan saat memproses pembayaran.');
         } finally {
             setLoading(false);
@@ -156,7 +202,7 @@ export default function MidtransPaymentGateway({
         try {
             await axios.post(`/api/payments/${paymentId}/sync`);
         } catch (err) {
-            console.warn('Payment sync failed', err);
+            console.warn('[MidtransPaymentGateway] Payment sync failed:', err);
         }
     };
 
@@ -169,9 +215,12 @@ export default function MidtransPaymentGateway({
 
     const triggerSnap = (snapToken, paymentId = null) => {
         if (!window.snap) {
+            console.error('[MidtransPaymentGateway] window.snap tidak tersedia!');
             setError('Sistem pembayaran belum siap. Silakan refresh halaman.');
             return;
         }
+
+        console.log('[MidtransPaymentGateway] Memicu Snap.pay dengan token:', snapToken?.slice(0, 20) + '...');
 
         window.snap.pay(snapToken, {
             onSuccess: async () => {
@@ -191,9 +240,9 @@ export default function MidtransPaymentGateway({
         });
     };
 
-    if (!isDpStatus && !isSettlement) return null;
-
+    // ── RETURN C: Sedang diproses (setelah snap interaksi) ────────────────
     if (paymentJustSubmitted) {
+        console.log('[MidtransPaymentGateway] RETURN C — paymentJustSubmitted');
         return (
             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 md:p-8 text-center">
                 <Clock size={32} className="text-blue-500 mx-auto mb-3 animate-pulse" />
@@ -206,11 +255,11 @@ export default function MidtransPaymentGateway({
         );
     }
 
-    console.log('MIDTRANS DEBUG', {
-        canShowMidtransSection: true,
-        bookingStatus: transactionData?.status,
-        payments: transactionData?.payments,
-        transactionData: transactionData
+    // ── RETURN D: Form pembayaran utama ───────────────────────────────────
+    console.log('[MidtransPaymentGateway] RETURN D — menampilkan form pembayaran', {
+        hasSnapToken,
+        isDpStatus,
+        isSettlement,
     });
 
     return (
@@ -220,6 +269,7 @@ export default function MidtransPaymentGateway({
                 {isDpStatus ? 'Pembayaran Uang Muka (DP)' : 'Pelunasan Tagihan'}
             </h3>
 
+            {/* Tab DP / Lunas — hanya tampil saat waiting_dp */}
             {isDpStatus && (
                 <div className="flex rounded-xl border border-beige overflow-hidden mb-6">
                     {DP_MODES.map((mode) => (
@@ -242,6 +292,7 @@ export default function MidtransPaymentGateway({
                 </div>
             )}
 
+            {/* Error message */}
             {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-4 rounded-2xl mb-6 text-sm flex items-start gap-2">
                     <AlertCircle size={18} className="shrink-0 mt-0.5" />
@@ -249,6 +300,7 @@ export default function MidtransPaymentGateway({
                 </div>
             )}
 
+            {/* Jika sudah ada snap_token aktif — tampilkan tombol lanjutkan */}
             {hasSnapToken ? (
                 <div className="text-center">
                     <p className="text-sm text-slate mb-6">
@@ -266,7 +318,9 @@ export default function MidtransPaymentGateway({
                     </button>
                 </div>
             ) : (
+                /* Form buat pembayaran baru — ditampilkan saat payments=[] maupun ada payment tapi bukan pending midtrans */
                 <form onSubmit={handleCreatePayment} className="space-y-5">
+                    {/* Input nominal DP */}
                     {isDpStatus && dpMode === 'dp' && (
                         <div>
                             <label className="block text-sm font-medium text-charcoal mb-2">
@@ -286,6 +340,7 @@ export default function MidtransPaymentGateway({
                         </div>
                     )}
 
+                    {/* Info bayar lunas */}
                     {isDpStatus && dpMode === 'full_payment' && (
                         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                             <div className="flex items-center gap-2 mb-2">
@@ -293,7 +348,7 @@ export default function MidtransPaymentGateway({
                                 <span className="text-sm font-semibold text-green-800">Bayar Lunas Sekarang</span>
                             </div>
                             <p className="text-xs text-green-700 mb-3">
-                                {transactionType === 'booking' ? 'Booking' : 'Sewa'} Anda akan langsung dikonfirmasi & selesai setelah pembayaran berhasil.
+                                {transactionType === 'booking' ? 'Booking' : 'Sewa'} Anda akan langsung dikonfirmasi &amp; selesai setelah pembayaran berhasil.
                             </p>
                             <div className="flex justify-between items-center">
                                 <span className="text-sm text-slate">Total yang dibayar:</span>
@@ -302,6 +357,7 @@ export default function MidtransPaymentGateway({
                         </div>
                     )}
 
+                    {/* Ringkasan sisa tagihan — hanya saat settlement */}
                     {isSettlement && (
                         <div className="mb-4">
                             <div className="flex justify-between items-center py-2 border-b border-beige/50">
@@ -319,6 +375,7 @@ export default function MidtransPaymentGateway({
                         </div>
                     )}
 
+                    {/* Pilihan metode pembayaran */}
                     <div>
                         <label className="block text-sm font-medium text-charcoal mb-2">Metode Pembayaran</label>
                         <div className="grid grid-cols-1 gap-2">
@@ -341,6 +398,7 @@ export default function MidtransPaymentGateway({
                         </div>
                     </div>
 
+                    {/* Tombol submit */}
                     <button
                         type="submit"
                         disabled={loading || (isDpStatus && dpMode === 'dp' && !amount) || !selectedOption}

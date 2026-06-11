@@ -94,7 +94,40 @@ export default function TrackBookingDetail() {
                 router.visit('/track-booking');
                 return;
             }
+
+            // Tampilkan data cache dulu agar halaman langsung terlihat
             setSession(parsed);
+
+            // Auto-refresh: ambil data terbaru dari API secara silent saat mount.
+            // Krusial untuk kasus di mana booking di-cancel oleh auto-cancel
+            // (misalnya ketika booking lain pada tanggal sama dikonfirmasi).
+            // Jika sessionStorage stale > 5 menit, refresh otomatis.
+            const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+            const isStale = !parsed.fetchedAt || (Date.now() - parsed.fetchedAt) > STALE_THRESHOLD_MS;
+
+            if (isStale) {
+                axios
+                    .post('/api/bookings/track', {
+                        booking_code: parsed.booking_code,
+                        contact: parsed.contact,
+                    })
+                    .then((res) => {
+                        if (res.data?.success && res.data?.data) {
+                            const updated = {
+                                booking_code: parsed.booking_code,
+                                contact: parsed.contact,
+                                data: res.data.data,
+                                fetchedAt: Date.now(),
+                            };
+                            sessionStorage.setItem(TRACKING_SESSION_KEY, JSON.stringify(updated));
+                            setSession(updated);
+                        }
+                    })
+                    .catch(() => {
+                        // Silent fail — tetap tampilkan data cache
+                        console.warn('[TrackBookingDetail] Auto-refresh gagal, menggunakan data cache.');
+                    });
+            }
         } catch {
             sessionStorage.removeItem(TRACKING_SESSION_KEY);
             router.visit('/track-booking');
