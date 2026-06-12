@@ -311,7 +311,7 @@ export default function TrackRentalDetail() {
                         )}
                     </LayeredCard>
 
-                    <Reveal className="space-y-6 md:space-y-8" stagger staggerChildren={0.08}>
+                    <div className="space-y-6 md:space-y-8" stagger staggerChildren={0.08}>
                         <RevealItem>
                             <SectionCard title="Informasi Penyewa" icon={User}>
                                 <InfoRow label="Nama" value={rental.customer_name} />
@@ -489,7 +489,7 @@ export default function TrackRentalDetail() {
                                 </SectionCard>
                             </RevealItem>
                         )}
-                    </Reveal>
+                    </div>
 
                     <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
                         <ChunkyButton href="/track-booking" className="w-full sm:w-auto justify-center">
